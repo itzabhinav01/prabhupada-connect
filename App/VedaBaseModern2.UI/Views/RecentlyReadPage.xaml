@@ -1,0 +1,99 @@
+<Page
+    x:Class="VedaBaseModern.UI.Views.RecentlyReadPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:VedaBaseModern.Core.Models"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,20" MaxWidth="800" HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Recently Read" Style="{StaticResource TitleTextBlockStyle}" />
+                <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
+                           Style="{StaticResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Margin="0,12,0,0" />
+                <ProgressBar IsIndeterminate="True"
+                             Visibility="{x:Bind BoolToVis(ViewModel.IsLoading), Mode=OneWay}"
+                             Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <Button x:Name="ClearHistoryFlyoutButton" Grid.Column="1" Content="Clear History" VerticalAlignment="Top">
+                <Button.Flyout>
+                    <Flyout>
+                        <StackPanel Spacing="12" MaxWidth="260">
+                            <TextBlock Text="Clear your reading history?" TextWrapping="Wrap" />
+                            <TextBlock Text="This removes Recently Read and Continue Reading only. Bookmarks and notes are not affected."
+                                       TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Button Content="Clear" Click="ClearHistoryButton_Click"
+                                    Background="{ThemeResource SystemFillColorCriticalBrush}"
+                                    Foreground="White" HorizontalAlignment="Right" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
+
+        <!-- Continue Reading -->
+        <Border Grid.Row="1" MaxWidth="800" HorizontalAlignment="Stretch" Margin="0,0,0,24"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1" CornerRadius="6" Padding="20"
+                Visibility="{x:Bind ItemToVis(ViewModel.ContinueReadingItem), Mode=OneWay}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="CONTINUE READING" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.ContinueReadingItem.BookTitle, Mode=OneWay}"
+                               Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+                    <TextBlock Text="{x:Bind ViewModel.ContinueReadingItem.Reference, Mode=OneWay}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Continue" VerticalAlignment="Center"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="ContinueReadingButton_Click" />
+            </Grid>
+        </Border>
+
+        <!-- Empty state -->
+        <StackPanel Grid.Row="2" MaxWidth="800" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="8"
+                    Visibility="{x:Bind ShowEmptyState(ViewModel.IsLoading, ViewModel.Items.Count), Mode=OneWay}">
+            <TextBlock Text="Nothing here yet." Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
+            <TextBlock Text="Open a passage to start your reading history."
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <!-- History list -->
+        <ListView Grid.Row="2" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                  SelectionChanged="Result_SelectionChanged"
+                  MaxWidth="800" HorizontalAlignment="Stretch">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="models:RecentlyReadItem">
+                    <StackPanel Margin="0,12,0,12" Opacity="{x:Bind DisplayOpacity}">
+                        <TextBlock Text="{x:Bind BookTitle}" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" FontSize="12" />
+                        <TextBlock Text="{x:Bind Reference}" FontWeight="Bold" FontSize="16" Margin="0,4,0,4" />
+                        <TextBlock Text="{x:Bind LastOpenedDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Page>

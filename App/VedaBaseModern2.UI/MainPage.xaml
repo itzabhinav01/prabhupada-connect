@@ -1,0 +1,300 @@
+<Page
+    x:Class="VedaBaseModern_UI.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:VedaBaseModern.Core.Models"
+    xmlns:services="using:VedaBaseModern.Core.Services"
+    xmlns:helpers="using:VedaBaseModern.UI.Helpers"
+    mc:Ignorable="d"
+    KeyboardAcceleratorPlacementMode="Hidden"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.Resources>
+        <helpers:NavMenuItemTemplateSelector x:Key="NavTemplateSelector">
+            <helpers:NavMenuItemTemplateSelector.FolderTemplate>
+                <DataTemplate x:DataType="models:BookNode">
+                    <NavigationViewItem Tag="{x:Bind}"
+                                        MenuItemsSource="{x:Bind Children}"
+                                        SelectsOnInvoked="False"
+                                        IsExpanded="True"
+                                        AllowDrop="True"
+                                        DragOver="FolderNavItem_DragOver"
+                                        Drop="FolderNavItem_Drop">
+                        <NavigationViewItem.Icon>
+                            <FontIcon Glyph="&#xED43;" FontSize="14" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        </NavigationViewItem.Icon>
+                        <NavigationViewItem.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Move Folder Up" Click="MoveFolderUpContextItem_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE74A;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Move Folder Down" Click="MoveFolderDownContextItem_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE74B;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Sort Books Alphabetically" Click="SortFolderAlphabeticalContextItem_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8CB;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </NavigationViewItem.ContextFlyout>
+                        <NavigationViewItem.Content>
+                            <Grid Background="Transparent"
+                                  CanDrag="True"
+                                  DragStarting="FolderNavItem_DragStarting"
+                                  PointerPressed="ItemRow_PointerPressed"
+                                  PointerMoved="ItemRow_PointerMoved"
+                                  PointerReleased="ItemRow_PointerReleased"
+                                  PointerCanceled="ItemRow_PointerCanceled"
+                                  AllowDrop="True"
+                                  DragOver="FolderNavItem_DragOver"
+                                  Drop="FolderNavItem_Drop"
+                                  Tag="{x:Bind}"
+                                  Padding="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <FontIcon Grid.Column="1" Glyph="&#xE76F;" FontSize="11" Margin="6,0,2,0" Opacity="0.35"
+                                          VerticalAlignment="Center" ToolTipService.ToolTip="Drag to reorder folder" />
+                            </Grid>
+                        </NavigationViewItem.Content>
+                    </NavigationViewItem>
+                </DataTemplate>
+            </helpers:NavMenuItemTemplateSelector.FolderTemplate>
+            <helpers:NavMenuItemTemplateSelector.HeaderTemplate>
+                <DataTemplate x:DataType="models:BookNode">
+                    <NavigationViewItemHeader Content="{x:Bind Title}" />
+                </DataTemplate>
+            </helpers:NavMenuItemTemplateSelector.HeaderTemplate>
+            <helpers:NavMenuItemTemplateSelector.BookTemplate>
+                <DataTemplate x:DataType="models:BookNode">
+                    <NavigationViewItem Tag="{x:Bind}"
+                                        CanDrag="True"
+                                        DragStarting="BookNavItem_DragStarting"
+                                        AllowDrop="True"
+                                        DragOver="BookNavItem_DragOver"
+                                        Drop="BookNavItem_Drop">
+                        <NavigationViewItem.Icon>
+                            <FontIcon Glyph="&#xE736;" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </NavigationViewItem.Icon>
+                        <NavigationViewItem.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Move Up" Click="MoveBookUpContextItem_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE74A;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Move Down" Click="MoveBookDownContextItem_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE74B;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="Move to Śrīla Prabhupāda's Works" Click="MoveBookToSPFolder_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xED43;" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Move to Works by Other Ācāryas &amp; Authors" Click="MoveBookToOtherFolder_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xED43;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="Sort This Folder Alphabetically" Click="SortFolderAlphabeticalContextItem_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8CB;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="Remove Book from Library" Click="RemoveBookContextItem_Click" Tag="{x:Bind}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE74D;" Foreground="#FF6B6B" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </NavigationViewItem.ContextFlyout>
+                        <NavigationViewItem.Content>
+                            <Grid Background="Transparent"
+                                  CanDrag="True"
+                                  DragStarting="BookNavItem_DragStarting"
+                                  Tapped="BookRow_Tapped"
+                                  PointerPressed="ItemRow_PointerPressed"
+                                  PointerMoved="ItemRow_PointerMoved"
+                                  PointerReleased="ItemRow_PointerReleased"
+                                  PointerCanceled="ItemRow_PointerCanceled"
+                                  AllowDrop="True"
+                                  DragOver="BookNavItem_DragOver"
+                                  Drop="BookNavItem_Drop"
+                                  Tag="{x:Bind}"
+                                  Padding="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <FontIcon Grid.Column="1" Glyph="&#xE76F;" FontSize="11" Margin="6,0,2,0" Opacity="0.35"
+                                          VerticalAlignment="Center" ToolTipService.ToolTip="Drag to reorder or move to another folder" />
+                            </Grid>
+                        </NavigationViewItem.Content>
+                    </NavigationViewItem>
+                </DataTemplate>
+            </helpers:NavMenuItemTemplateSelector.BookTemplate>
+        </helpers:NavMenuItemTemplateSelector>
+    </Page.Resources>
+
+    <Page.KeyboardAccelerators>
+        <!-- Ctrl+Shift+L -> Toggle Light/Dark Mode. Hidden placement mode prevents floating badge. -->
+        <KeyboardAccelerator Key="L" Modifiers="Control,Shift" Invoked="ThemeAccelerator_Invoked" />
+        <!-- Ctrl+H -> Recently Read. -->
+        <KeyboardAccelerator Key="H" Modifiers="Control" Invoked="RecentlyReadAccelerator_Invoked" />
+        <!-- F/K are common "focus search" idioms -->
+        <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="SearchAccelerator_Invoked" />
+        <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="SearchAccelerator_Invoked" />
+        <!-- F1 -> Open User Manual & Research Guide -->
+        <KeyboardAccelerator Key="F1" Invoked="HelpAccelerator_Invoked" />
+        <!-- Ctrl+Shift+S -> Open Folio Advanced Search & Word Wheel -->
+        <KeyboardAccelerator Key="S" Modifiers="Control,Shift" Invoked="AdvancedSearchAccelerator_Invoked" />
+        <!-- Ctrl+Shift+F -> Toggle Focus / Zen Mode -->
+        <KeyboardAccelerator Key="F" Modifiers="Control,Shift" Invoked="FocusModeAccelerator_Invoked" />
+        <!-- Esc -> Exit Focus View / Close Overlays -->
+        <KeyboardAccelerator Key="Escape" Invoked="EscapeAccelerator_Invoked" />
+    </Page.KeyboardAccelerators>
+
+    <Grid x:Name="RootMainGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" x:Name="TopBarRow" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- App-level top bar. Includes Library toggle (☰ three lines), branding, theme toggle, and 3-dots more menu. -->
+        <Grid x:Name="AppTopBar" Grid.Row="0" Padding="4,4,16,4" Background="{ThemeResource NavigationViewDefaultPaneBackground}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" x:Name="LibraryToggleButton" Click="LibraryToggleButton_Click"
+                    Style="{StaticResource TextBlockButtonStyle}" Width="40" Height="40" Padding="0"
+                    ToolTipService.ToolTip="Toggle scripture library sidebar (☰ Three Lines)"
+                    AutomationProperties.Name="Toggle scripture library sidebar">
+                <FontIcon x:Name="LibraryToggleIcon" Glyph="&#xE700;" FontSize="16" />
+            </Button>
+            <TextBlock Grid.Column="1" Text="VedaBaseModern" VerticalAlignment="Center" Margin="8,0,0,0"
+                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                <Button x:Name="MainThemeToggleButton" Click="ThemeToggleButton_Click"
+                        Style="{StaticResource TextBlockButtonStyle}" Width="40" Height="40" Padding="0"
+                        ToolTipService.ToolTip="Toggle Light/Dark Mode (Ctrl+Shift+L)"
+                        AutomationProperties.Name="Toggle Light/Dark Mode"
+                        KeyboardAcceleratorPlacementMode="Hidden">
+                    <FontIcon x:Name="MainThemeToggleIcon" Glyph="&#xE706;" FontSize="15" />
+                </Button>
+                <!-- 3-Dots More Options Menu (Personal Workspace & Tools) -->
+                <Button x:Name="MoreOptionsMenuButton"
+                        Style="{StaticResource TextBlockButtonStyle}" Width="40" Height="40" Padding="0"
+                        ToolTipService.ToolTip="Personal Workspace &amp; Tools (···)"
+                        AutomationProperties.Name="More options">
+                    <FontIcon Glyph="&#xE712;" FontSize="16" />
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuFlyoutItem Text="Recently Read" Click="OpenRecentlyRead_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE81C;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Bookmarks" Click="OpenBookmarks_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8A4;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Notes &amp; Realizations" Click="OpenNotes_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE70F;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Highlights" Click="OpenHighlights_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE7B3;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="Advanced Search (Folio)" Click="OpenAdvancedSearch_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE71E;" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="User Guide &amp; Manual" Click="OpenUserGuide_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE897;" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Keyboard Shortcuts" Click="OpenKeyboardShortcuts_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE765;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+
+                <!-- SCRIPTURE LIBRARY: "which book/chapter am I reading" - its
+                     own collapse control (LibraryToggleButton above), not the
+                     hamburger. IsPaneToggleButtonVisible=False hides
+                     NavigationView's own built-in toggle so there is exactly
+                     one, unambiguous way to collapse this pane. -->
+                <NavigationView x:Name="NavView"
+                                Grid.Row="1"
+                                SelectionChanged="NavView_SelectionChanged"
+                                ItemInvoked="NavView_ItemInvoked"
+                                IsBackButtonVisible="Collapsed"
+                                IsSettingsVisible="True"
+                                IsPaneToggleButtonVisible="False"
+                                PaneDisplayMode="Auto"
+                                OpenPaneLength="300"
+                                MenuItemsSource="{x:Bind ViewModel.Books, Mode=OneWay}"
+                                MenuItemTemplateSelector="{StaticResource NavTemplateSelector}">
+
+                    <NavigationView.AutoSuggestBox>
+                        <AutoSuggestBox x:Name="GlobalSearchBox"
+                                        PlaceholderText="Search the VedaBase, or type @ to go to a verse..."
+                                        QueryIcon="Find"
+                                        TextMemberPath="DisplayText"
+                                        QuerySubmitted="AutoSuggestBox_QuerySubmitted"
+                                        TextChanged="AutoSuggestBox_TextChanged"
+                                        SuggestionChosen="AutoSuggestBox_SuggestionChosen">
+                            <AutoSuggestBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Padding="0,4">
+                                        <TextBlock Text="{Binding DisplayText}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding SubText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </AutoSuggestBox.ItemTemplate>
+                        </AutoSuggestBox>
+                    </NavigationView.AutoSuggestBox>
+
+                    <TabView x:Name="ContentTabs"
+                             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                             CanDragTabs="True" CanReorderTabs="True"
+                             TabCloseRequested="ContentTabs_TabCloseRequested"
+                             AddTabButtonClick="ContentTabs_AddTabButtonClick" />
+                </NavigationView>
+
+        <!-- Fullscreen Focus View Container (Totally distraction-free, Esc to exit) -->
+        <Grid x:Name="FocusFullscreenHost" Grid.RowSpan="2" Visibility="Collapsed"
+              Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" />
+    </Grid>
+</Page>

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/App/">
+    <Project Path="App/VedaBaseModern2.Core/VedaBaseModern2.Core.csproj" />
+    <Project Path="App/VedaBaseModern2.UI/VedaBaseModern2.UI.csproj">
+      <Platform Project="x86" />
+    </Project>
+  </Folder>
+</Solution>

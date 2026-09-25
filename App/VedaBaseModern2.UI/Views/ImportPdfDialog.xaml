@@ -1,0 +1,57 @@
+<ContentDialog
+    x:Class="VedaBaseModern.UI.Views.ImportPdfDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Import PDF Book into Library"
+    PrimaryButtonText="Import Book"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary">
+
+    <StackPanel Spacing="14" MinWidth="420" Padding="0,8,0,0">
+        <TextBlock Text="Select a PDF spiritual book to import directly into your VedaBase library. No JSON conversion needed!"
+                   TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="13" />
+
+        <!-- File Picker Row -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="PDF File" FontWeight="SemiBold" FontSize="13" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="FilePathBox" IsReadOnly="True" PlaceholderText="Choose a .pdf file..." Margin="0,0,8,0" />
+                <Button Grid.Column="1" Content="Browse..." Click="BrowseButton_Click" Style="{StaticResource AccentButtonStyle}" />
+            </Grid>
+        </StackPanel>
+
+        <!-- Book Title -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Book Title" FontWeight="SemiBold" FontSize="13" />
+            <TextBox x:Name="TitleBox" PlaceholderText="e.g. Harināma Cintāmaṇi" />
+        </StackPanel>
+
+        <!-- Author / Ācārya -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Author / Ācārya" FontWeight="SemiBold" FontSize="13" />
+            <TextBox x:Name="AuthorBox" Text="Vaiṣṇava Ācārya" PlaceholderText="e.g. Śrīla Bhaktivinoda Ṭhākura" />
+        </StackPanel>
+
+        <!-- Category / Folder -->
+        <StackPanel Spacing="6">
+            <TextBlock Text="Library Folder / Category" FontWeight="SemiBold" FontSize="13" />
+            <ComboBox x:Name="CategoryBox" IsEditable="True" HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="Works by Other Ācāryas &amp; Authors" IsSelected="True" />
+                <ComboBoxItem Content="Japa Books" />
+                <ComboBoxItem Content="Scientific Books" />
+                <ComboBoxItem Content="Vaiṣṇava Etiquette" />
+                <ComboBoxItem Content="Śrīla Prabhupāda's Works" />
+            </ComboBox>
+        </StackPanel>
+
+        <!-- Status / Error message -->
+        <TextBlock x:Name="StatusMessageText" Foreground="#FF6B6B" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" />
+    </StackPanel>
+</ContentDialog>

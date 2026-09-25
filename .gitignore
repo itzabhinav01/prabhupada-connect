@@ -1,0 +1,74 @@
+# Build Results & Outputs
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.msi
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+Generated Files/
+
+# Visual Studio & IDEs
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+
+# Windows Architecture Outputs
+x64/
+x86/
+ARM/
+ARM64/
+[Dd]ebug/
+[Rr]elease/
+*.wapproj.user
+*.publishsettings
+
+# Runtime User Data & Temporary Backups
+user.db
+*.vdbbackup
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Raw extraction RTF source files (corpus already compiled into prabhupada_corpus.db)
+Database/sources/
+*.rtf
+
+# Python Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Operating System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Scratch & Logs
+*.tmp
+*.log
+out.txt
+reader_debug.log

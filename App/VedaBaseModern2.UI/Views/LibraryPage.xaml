@@ -1,0 +1,140 @@
+<Page
+    x:Class="VedaBaseModern.UI.Views.LibraryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:VedaBaseModern.Core.Models"
+    xmlns:viewmodels="using:VedaBaseModern.UI.ViewModels"
+    xmlns:converters="using:VedaBaseModern.UI.Converters"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisConverter" />
+    </Page.Resources>
+
+    <Grid>
+        <!-- Level 0: Canto List (For Śrīmad-Bhāgavatam) -->
+        <Grid Visibility="{x:Bind BoolToVis(ViewModel.IsCantoListVisible), Mode=OneWay}" Padding="0,0,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="{x:Bind ViewModel.CurrentBook.Title, Mode=OneWay, FallbackValue='Śrīmad-Bhāgavatam'}" 
+                       Style="{StaticResource TitleTextBlockStyle}" 
+                       Margin="0,0,0,8"/>
+            <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.Level0Subtitle, Mode=OneWay}" 
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Margin="0,0,0,24"/>
+
+            <ListView Grid.Row="2" 
+                      ItemsSource="{x:Bind ViewModel.Cantos, Mode=OneWay}" 
+                      SelectionChanged="Canto_SelectionChanged" 
+                      SelectionMode="Single"
+                      Margin="0,0,0,24"
+                      ItemContainerStyle="{StaticResource DefaultListViewItemStyle}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="viewmodels:CantoNode">
+                        <Grid Padding="12,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                                <TextBlock Text="{x:Bind Subtitle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{x:Bind VersesCountText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="16,0,0,0" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+
+        <!-- Level 1: Chapter List -->
+        <Grid Visibility="{x:Bind BoolToVis(ViewModel.IsChapterListVisible), Mode=OneWay}" Padding="0,0,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <StackPanel Margin="0,0,0,16">
+                <!-- Back to Cantos / Lilas button for 3-level works -->
+                <Button Content="{x:Bind ViewModel.BackToLevel0ButtonText, Mode=OneWay}" 
+                        Click="BackToCantos_Click" 
+                        Style="{StaticResource TextBlockButtonStyle}" 
+                        Visibility="{x:Bind BoolToVis(ViewModel.HasLevel0), Mode=OneWay}"
+                        Margin="0,0,0,12" />
+                <TextBlock Text="{x:Bind ViewModel.ChapterListTitle, Mode=OneWay}" 
+                           Style="{StaticResource TitleTextBlockStyle}" 
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="{x:Bind ViewModel.CurrentBook.Author, Mode=OneWay}" 
+                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" 
+                           FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" 
+                           Visibility="{x:Bind BoolToVis(ViewModel.CurrentBook.IsOtherAuthor), Mode=OneWay}" />
+                <TextBlock Text="{x:Bind ViewModel.ChapterListSubtitle, Mode=OneWay}" 
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Margin="0,0,0,16"/>
+            </StackPanel>
+
+            <!-- Content -->
+            <ListView Grid.Row="2" 
+                      ItemsSource="{x:Bind ViewModel.DisplayedChapters, Mode=OneWay}" 
+                      SelectionChanged="Chapter_SelectionChanged" 
+                      SelectionMode="Single"
+                      Margin="0,0,0,24"
+                      ItemContainerStyle="{StaticResource DefaultListViewItemStyle}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:ChapterNode">
+                        <Grid Padding="12,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind Records.Count}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="16,0,8,0" Visibility="{x:Bind HasMultipleRecords, Converter={StaticResource BoolToVisConverter}}" />
+                            <TextBlock Grid.Column="2" Text="verses" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Visibility="{x:Bind HasMultipleRecords, Converter={StaticResource BoolToVisConverter}}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+
+        <!-- Level 2: Verse List -->
+        <Grid Visibility="{x:Bind BoolToVis(ViewModel.IsVerseListVisible), Mode=OneWay}" Padding="0,0,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <Button Content="← Back to Chapters" 
+                    Click="BackToChapters_Click" 
+                    Style="{StaticResource TextBlockButtonStyle}" 
+                    Margin="0,0,0,24" />
+
+            <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.SelectedChapter.Title, Mode=OneWay, FallbackValue=''}" 
+                       Style="{StaticResource TitleTextBlockStyle}" 
+                       Margin="0,0,0,32" TextWrapping="Wrap" />
+
+            <ListView Grid.Row="2" 
+                      ItemsSource="{x:Bind ViewModel.SelectedChapter.Records, Mode=OneWay}" 
+                      SelectionChanged="Record_SelectionChanged" 
+                      SelectionMode="Single"
+                      ItemContainerStyle="{StaticResource DefaultListViewItemStyle}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:RecordNode">
+                        <Grid Padding="12,16">
+                            <TextBlock Text="{x:Bind Reference}" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+    </Grid>
+</Page>

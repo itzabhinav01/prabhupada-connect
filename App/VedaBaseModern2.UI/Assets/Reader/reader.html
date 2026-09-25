@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>VedaBase Modern Reader</title>
+    <link rel="stylesheet" href="reader.css">
+</head>
+<body>
+    <div id="reader-wrapper">
+        <main id="content" class="reader-container"></main>
+    </div>
+
+    <!-- Floating Selection Toolbar -->
+    <div id="selection-toolbar" class="selection-toolbar hidden">
+        <button class="hl-btn hl-yellow" title="Highlight Yellow" data-color="Yellow"></button>
+        <button class="hl-btn hl-green" title="Highlight Green" data-color="Green"></button>
+        <button class="hl-btn hl-blue" title="Highlight Blue" data-color="Blue"></button>
+        <div class="toolbar-divider"></div>
+        <button class="tool-btn" id="btn-copy-selection" title="Copy text">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span>Copy</span>
+        </button>
+        <button class="tool-btn" id="btn-note-selection" title="Add note">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            <span>Note</span>
+        </button>
+        <button class="tool-btn" id="btn-concordance" title="Look up in Concordance across all books">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>Concordance</span>
+        </button>
+    </div>
+
+    <script src="reader.js"></script>
+</body>
+</html>
