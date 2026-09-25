@@ -188,9 +188,16 @@
                     AutomationProperties.Name="Toggle scripture library sidebar">
                 <FontIcon x:Name="LibraryToggleIcon" Glyph="&#xE700;" FontSize="16" />
             </Button>
-            <TextBlock Grid.Column="1" Text="VedaBaseModern" VerticalAlignment="Center" Margin="8,0,0,0"
-                       Style="{StaticResource BodyStrongTextBlockStyle}"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0" Spacing="8">
+                <Border Width="24" Height="24" CornerRadius="12">
+                    <Border.Background>
+                        <ImageBrush ImageSource="ms-appx:///Assets/Square44x44Logo.scale-200.png" Stretch="UniformToFill" />
+                    </Border.Background>
+                </Border>
+                <TextBlock Text="Prabhupāda Connect" VerticalAlignment="Center"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                 <Button x:Name="MainThemeToggleButton" Click="ThemeToggleButton_Click"
                         Style="{StaticResource TextBlockButtonStyle}" Width="40" Height="40" Padding="0"
@@ -269,7 +276,7 @@
 
                     <NavigationView.AutoSuggestBox>
                         <AutoSuggestBox x:Name="GlobalSearchBox"
-                                        PlaceholderText="Search the VedaBase, or type @ to go to a verse..."
+                                        PlaceholderText="Search Prabhupāda's books, or type @ to jump to a verse..."
                                         QueryIcon="Find"
                                         TextMemberPath="DisplayText"
                                         QuerySubmitted="AutoSuggestBox_QuerySubmitted"

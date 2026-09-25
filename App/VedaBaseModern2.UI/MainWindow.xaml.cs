@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
+        Title = "Prabhupāda Connect";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
 

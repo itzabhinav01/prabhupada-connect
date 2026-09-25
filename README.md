@@ -1,10 +1,16 @@
-# 🪷 Prabhupāda Connect (VedaBase Modern)
+<p align="center">
+  <img src="App/VedaBaseModern2.UI/Assets/prabhupada_logo.png" width="160" height="160" alt="Prabhupāda Connect Logo" style="border-radius: 50%;" />
+  <h1 align="center">Prabhupāda Connect</h1>
+  <p align="center"><b>The Modern Bhaktivedanta VedaBase Research Sanctuary &amp; Digital Workstation</b></p>
+</p>
 
-[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![Windows App SDK](https://img.shields.io/badge/WinUI-3.0-0078D4?logo=windows&logoColor=white)](https://learn.microsoft.com/windows/apps/winui/)
-[![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5%20BM25-003B57?logo=sqlite&logoColor=white)](https://sqlite.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+<p align="center">
+  <a href="https://dotnet.microsoft.com/"><img src="https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white" alt=".NET 10" /></a>
+  <a href="https://learn.microsoft.com/windows/apps/winui/"><img src="https://img.shields.io/badge/WinUI-3.0-0078D4?logo=windows&logoColor=white" alt="Windows App SDK" /></a>
+  <a href="https://sqlite.org/"><img src="https://img.shields.io/badge/SQLite-FTS5%20BM25-003B57?logo=sqlite&logoColor=white" alt="SQLite FTS5" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" /></a>
+</p>
 
 > **A high-performance, open-source research sanctuary and digital library for the complete teachings, translations, and commentaries of His Divine Grace A.C. Bhaktivedanta Swami Prabhupāda.**
 

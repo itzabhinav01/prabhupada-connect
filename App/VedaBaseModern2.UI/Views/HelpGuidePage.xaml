@@ -52,9 +52,13 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Spacing="3">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xE897;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                    <TextBlock Text="VedaBase Modern User Manual &amp; Research Guide" Style="{StaticResource TitleTextBlockStyle}" FontSize="23" />
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <Border Width="36" Height="36" CornerRadius="18" VerticalAlignment="Center">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="ms-appx:///Assets/Square44x44Logo.scale-200.png" Stretch="UniformToFill" />
+                                        </Border.Background>
+                                    </Border>
+                                    <TextBlock Text="Prabhupāda Connect User Manual &amp; Research Guide" Style="{StaticResource TitleTextBlockStyle}" FontSize="22" VerticalAlignment="Center" />
                                 </StackPanel>
                                 <TextBlock Text="Complete, searchable in-app reference for scripture reading, Sanskrit meters, Folio advanced search, book ingestion, and cloud sync."
                                            Style="{StaticResource BodyTextBlockStyle}"

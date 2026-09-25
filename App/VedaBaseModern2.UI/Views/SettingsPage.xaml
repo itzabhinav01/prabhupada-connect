@@ -815,6 +815,38 @@
                 </StackPanel>
             </Border>
 
+            <!-- About Prabhupāda Connect -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="16">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Width="72" Height="72" CornerRadius="36" BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" BorderThickness="2">
+                            <Border.Background>
+                                <ImageBrush ImageSource="ms-appx:///Assets/Square150x150Logo.scale-200.png" Stretch="UniformToFill" />
+                            </Border.Background>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                            <TextBlock Text="Prabhupāda Connect" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="The Modern Bhaktivedanta VedaBase Research Workstation"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="13" />
+                            <TextBlock Text="Dedicated to His Divine Grace A.C. Bhaktivedanta Swami Prabhupāda"
+                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontSize="12" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="Prabhupāda Connect is an open-source, ultra-fast research studio featuring the complete canon of Śrīla Prabhupāda's teachings, advanced Folio search, Sanskrit meter analysis, personal annotations, and cloud synchronization."
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <HyperlinkButton Content="GitHub Repository (Contribute &amp; Star)"
+                                         NavigateUri="https://github.com/itzabhinav01/prabhupada-connect" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Reset -->
             <Button x:Name="ResetFlyoutButton" Content="Reset to Defaults" HorizontalAlignment="Left">
                 <Button.Flyout>

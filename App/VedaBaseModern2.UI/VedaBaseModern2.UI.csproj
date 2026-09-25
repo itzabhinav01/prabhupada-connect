@@ -13,6 +13,10 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <AssemblyTitle>Prabhupāda Connect</AssemblyTitle>
+    <Product>Prabhupāda Connect</Product>
+    <Description>Prabhupāda Connect - The Modern Bhaktivedanta VedaBase Research Studio</Description>
   </PropertyGroup>
 
   <ItemGroup>
