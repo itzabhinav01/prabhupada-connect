@@ -21,7 +21,9 @@
 - [🌸 Welcome to Prabhupāda Connect](#-welcome-to-prabhupāda-connect)
 - [🚀 Quickstart: How to Install & Run (Zero Tech Knowledge Required)](#-quickstart-how-to-install--run-zero-tech-knowledge-required)
 - [🖥️ Easy Desktop Access (No Digging Through Folders)](#-easy-desktop-access-no-digging-through-folders)
-- [📤 How to Share the App with Others](#-how-to-share-the-app-with-others)
+- [📤 How to Share the App with Others (WhatsApp & Cloud)](#-how-to-share-the-app-with-others-whatsapp-pen-drive-or-cloud)
+  - [📦 1-Click Standalone Installer (.exe) — Best for WhatsApp](#-option-1-1-click-standalone-installer-exe--best-for-whatsapp)
+  - [📁 Sharing via ZIP Folder](#-option-2-share-via-zip-folder-usb-drive-or-google-drive)
 - [💾 Moving to a New Computer: Never Lose Your Notes or Highlights](#-moving-to-a-new-computer-never-lose-your-notes-or-highlights)
 - [☁️ Free Cloud Sync with Supabase (Multi-Device Sync)](#️-free-cloud-sync-with-supabase-multi-device-sync)
   - [🛡️ Keeping Supabase Free Tier Awake Forever (GitHub Action)](#-keeping-supabase-free-tier-awake-forever-github-action)
@@ -31,6 +33,7 @@
   - [Tech Stack Overview](#tech-stack-overview)
   - [Repository Layout](#repository-layout)
   - [Building from Source & Running Tests](#building-from-source--running-tests)
+  - [Packaging the Standalone Installer (.exe)](#-packaging-the-standalone-installer-exe)
 - [📱 Mobile App Roadmap (Android Client)](#-mobile-app-roadmap-android-client)
 - [📜 License & Dedication](#-license--dedication)
 
@@ -264,6 +267,30 @@ dotnet run --project tests/VedaBaseModern2.Tests/VedaBaseModern2.Tests.csproj
 # Run the app
 ./Launch.ps1
 ```
+
+### 📦 Packaging the Standalone Installer (.exe)
+
+Anyone—whether a core developer or a contributor—can package the complete solution into a single, self-extracting setup `.exe` with one click:
+
+**Option A: 1-Click Batch File (Simplest)**
+In the root of the repository, simply double-click:
+👉 **`Build-Installer.bat`**
+
+**Option B: PowerShell Command Line**
+```powershell
+./Build-Installer.ps1
+```
+
+#### What the Build Script Does Automatically:
+1. **Prerequisite Check**: Confirms the .NET 10 SDK is installed.
+2. **Corpus Integrity Verification**: Ensures `Database\prabhupada_corpus.db` is fully pulled (automatically runs `git lfs pull` if a lightweight pointer is detected).
+3. **Inno Setup Detection & Auto-Install**: Automatically locates `ISCC.exe` on PATH or in system program directories. If missing, it can automatically install Inno Setup via `winget`.
+4. **Clean Release Compilation**: Compiles `VedaBaseModern2.UI.csproj` in Release mode with all dependencies and assets.
+5. **Solid LZMA2 Compression**: Packages the binaries, web reader assets, multi-resolution icons, and 267MB database into a ~90MB single-file executable at:
+   ```
+   dist\PrabhupadaConnect-Setup-v2.0.exe
+   ```
+6. **Ready for WhatsApp**: Opens File Explorer with the installer selected so you can instantly drag-and-drop it into WhatsApp Desktop/Web or copy it to a flash drive.
 
 ---
 
