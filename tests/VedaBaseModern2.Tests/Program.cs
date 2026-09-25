@@ -21,7 +21,21 @@ class Program
         Console.WriteLine(" VedaBaseModern 2 - Comprehensive Automated Verification");
         Console.WriteLine("=========================================================\n");
 
-        string dbDir = @"C:\VedaBaseModern2\Database";
+        string baseDir = AppContext.BaseDirectory;
+        string? dbDir = null;
+        var current = new DirectoryInfo(baseDir);
+        while (current != null)
+        {
+            string candidate = Path.Combine(current.FullName, "Database");
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "prabhupada_corpus.db")))
+            {
+                dbDir = candidate;
+                break;
+            }
+            current = current.Parent;
+        }
+
+        if (string.IsNullOrEmpty(dbDir)) dbDir = @"C:\VedaBaseModern2\Database";
         string corpusDb = Path.Combine(dbDir, "prabhupada_corpus.db");
         string testUserDb = Path.Combine(Path.GetTempPath(), $"vedabase_test_{Guid.NewGuid():N}.db");
 

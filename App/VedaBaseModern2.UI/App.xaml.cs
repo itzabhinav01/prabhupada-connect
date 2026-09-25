@@ -65,8 +65,25 @@ public partial class App : Application
 
         this.InitializeComponent();
 
-        // 100% self-contained database directory in C:\VedaBaseModern2\Database\
-        string dbDir = @"C:\VedaBaseModern2\Database";
+        // Auto-discover Database directory relative to execution location or fallback
+        string baseDir = AppContext.BaseDirectory;
+        string? dbDir = null;
+        var current = new DirectoryInfo(baseDir);
+        while (current != null)
+        {
+            string candidate = Path.Combine(current.FullName, "Database");
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "prabhupada_corpus.db")))
+            {
+                dbDir = candidate;
+                break;
+            }
+            current = current.Parent;
+        }
+
+        if (string.IsNullOrEmpty(dbDir))
+        {
+            dbDir = @"C:\VedaBaseModern2\Database";
+        }
         if (!Directory.Exists(dbDir)) Directory.CreateDirectory(dbDir);
 
         string corpusDbPath = Path.Combine(dbDir, "prabhupada_corpus.db");

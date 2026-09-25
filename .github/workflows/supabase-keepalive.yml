@@ -1,0 +1,38 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Runs every 3 days at 00:00 UTC to prevent Supabase Free Tier from pausing due to inactivity
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  ping-supabase:
+    name: Keep Free Supabase Active
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send keep-alive query to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "NOTICE: SUPABASE_URL or SUPABASE_ANON_KEY secrets not configured yet."
+            echo "Go to your GitHub repository -> Settings -> Secrets and variables -> Actions to add them."
+            exit 0
+          fi
+          
+          # Clean URL trailing slash if present
+          CLEAN_URL="${SUPABASE_URL%/}"
+          
+          echo "Sending keepalive request to ${CLEAN_URL}/rest/v1/vb_schema_info..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${CLEAN_URL}/rest/v1/vb_schema_info" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+            
+          echo "Supabase HTTP response: $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
+            echo "Success! Supabase database is active and awake."
+          else
+            echo "Warning: Received HTTP $STATUS. Check your Supabase project status."
+          fi

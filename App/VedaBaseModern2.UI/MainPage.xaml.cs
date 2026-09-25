@@ -175,7 +175,7 @@ public sealed partial class MainPage : Page
         if (string.Equals(startupPage, "Search", StringComparison.OrdinalIgnoreCase))
         {
             NavView.SelectedItem = null;
-            string? query = Environment.GetEnvironmentVariable("VEDABASE_STARTUP_SEARCH_QUERY") ?? "neophyte";
+            string? query = Environment.GetEnvironmentVariable("VEDABASE_STARTUP_SEARCH_QUERY") ?? "bhakti";
             CreateNewTab($"Search: {query}", "\uE721", typeof(SearchPage), query);
             return;
         }
