@@ -86,19 +86,45 @@ This creates a golden **Prabhupāda Connect** shortcut icon directly on your Win
 
 ---
 
-## 📤 How to Share the App with Others
+## 📤 How to Share the App with Others (WhatsApp, Pen Drive, or Cloud)
 
-Want to share Prabhupāda Connect with friends, family, or your local temple community?
+Want to share Prabhupāda Connect with friends, family, or your local temple community? We made it as simple as sending a single WhatsApp document!
 
-1. **Prepare the Package**:
-   - Ensure the app has been built once (or run `Launch.bat` once to confirm it runs).
-   - Ensure the `Database\prabhupada_corpus.db` file is present in the `Database\` folder.
-2. **Zip the Folder**:
-   - Right-click the `prabhupada-connect` folder $\rightarrow$ **Compress to ZIP file**.
-3. **Share via USB Drive or Cloud Drive**:
-   - Share the ZIP via Google Drive, Telegram, or a USB drive.
-4. **Recipient's Instructions**:
-   - The recipient only needs to extract the ZIP and double-click `Launch.bat` (or `Create-Desktop-Shortcut.bat`). Everything is 100% self-contained!
+### 🎁 Option 1: 1-Click Standalone Installer (.exe) — Best for WhatsApp!
+
+You can generate a single self-contained setup installer (`.exe`) that anyone can double-click to install in seconds.
+
+#### How to Create the Setup `.exe` File (For You or Any Contributor):
+1. In the repository folder, simply double-click:
+   👉 **`Build-Installer.bat`**
+2. The script will automatically verify your environment, compile the latest Release build, and package everything (including the entire 267MB scripture corpus, fonts, and icons) into a highly compressed setup `.exe`:
+   ```
+   dist\PrabhupadaConnect-Setup-v2.0.exe  (Size: ~90 MB)
+   ```
+
+#### How to Send via WhatsApp:
+1. Open **WhatsApp** (WhatsApp Desktop, WhatsApp Web, or WhatsApp on your phone).
+2. Open the chat with your friend.
+3. Click the **`+`** or **Paperclip** attachment icon.
+4. Select **Document** *(Note: Select "Document", not "Photos & Videos")*.
+5. Select `dist\PrabhupadaConnect-Setup-v2.0.exe` and click Send! *(WhatsApp supports document files up to 2 GB, so a 90 MB file sends quickly and seamlessly)*.
+
+#### What Your Friend Does on Their Laptop:
+1. Save the received file from WhatsApp to their computer.
+2. Double-click **`PrabhupadaConnect-Setup-v2.0.exe`**.
+3. Click **Next** $\rightarrow$ **Install**.
+   - It installs automatically to: `C:\vedabase versions\modern vedabase v2`
+   - It places a **Prabhupāda Connect** icon with Śrīla Prabhupāda's portrait right on their Windows Desktop!
+4. Click **Finish** — Prabhupāda Connect opens immediately!
+
+---
+
+### 📁 Option 2: Share via ZIP Folder (USB Drive or Google Drive)
+
+If you prefer copying over a USB pen drive or Google Drive without running the installer:
+1. Right-click the application folder $\rightarrow$ **Compress to ZIP file**.
+2. Copy the ZIP file to your friend's computer and extract it.
+3. Your friend simply double-clicks **`Launch.bat`** or **`Create-Desktop-Shortcut.bat`**. Everything is completely self-contained!
 
 ---
 

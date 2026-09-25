@@ -3,7 +3,10 @@ $DesktopPath = [System.Environment]::GetFolderPath('Desktop')
 $Shortcut = $WshShell.CreateShortcut("$DesktopPath\Prabhupada Connect.lnk")
 $Shortcut.TargetPath = "$PSScriptRoot\Launch.bat"
 $Shortcut.WorkingDirectory = "$PSScriptRoot"
-$iconPath = "$PSScriptRoot\App\VedaBaseModern2.UI\Assets\AppIcon.ico"
+$iconPath = "$PSScriptRoot\Assets\AppIcon.ico"
+if (-not (Test-Path $iconPath)) {
+    $iconPath = "$PSScriptRoot\App\VedaBaseModern2.UI\Assets\AppIcon.ico"
+}
 if (Test-Path $iconPath) {
     $Shortcut.IconLocation = "$iconPath, 0"
 }

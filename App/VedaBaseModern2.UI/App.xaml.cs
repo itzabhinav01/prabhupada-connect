@@ -82,7 +82,26 @@ public partial class App : Application
 
         if (string.IsNullOrEmpty(dbDir))
         {
-            dbDir = @"C:\VedaBaseModern2\Database";
+            string[] fallbacks = new[]
+            {
+                @"C:\vedabase versions\modern vedabase v2\Database",
+                @"C:\vedabase versions\modern vedabase v2",
+                @"C:\VedaBaseModern2\Database",
+                @"C:\VedaBaseModern\Database"
+            };
+            foreach (var fb in fallbacks)
+            {
+                if (Directory.Exists(fb) && File.Exists(Path.Combine(fb, "prabhupada_corpus.db")))
+                {
+                    dbDir = fb;
+                    break;
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(dbDir))
+        {
+            dbDir = @"C:\vedabase versions\modern vedabase v2\Database";
         }
         if (!Directory.Exists(dbDir)) Directory.CreateDirectory(dbDir);
 
