@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using VedaBaseModern.Core.Models;
+using VedaBaseModern.Core.Services;
 
 namespace VedaBaseModern.Core.Repositories
 {
@@ -929,8 +930,7 @@ namespace VedaBaseModern.Core.Repositories
 
                     if (isExactCase)
                     {
-                        countSql += " AND (r.Transliteration GLOB ('*' || $caseQuery || '*') OR r.Synonyms GLOB ('*' || $caseQuery || '*') OR r.Translation GLOB ('*' || $caseQuery || '*') OR r.Purports GLOB ('*' || $caseQuery || '*') OR r.Reference GLOB ('*' || $caseQuery || '*'))";
-                        countCmd.Parameters.AddWithValue("$caseQuery", query.Trim());
+                        countSql += IastSearchHelper.BuildCaseGlobSqlClause(query, countCmd, "cCase");
                     }
 
                     countCmd.CommandText = countSql;
@@ -986,8 +986,7 @@ namespace VedaBaseModern.Core.Repositories
 
                     if (isExactCase)
                     {
-                        querySql += " AND (r.Transliteration GLOB ('*' || $caseQuery || '*') OR r.Synonyms GLOB ('*' || $caseQuery || '*') OR r.Translation GLOB ('*' || $caseQuery || '*') OR r.Purports GLOB ('*' || $caseQuery || '*') OR r.Reference GLOB ('*' || $caseQuery || '*')) ";
-                        queryCmd.Parameters.AddWithValue("$caseQuery", query.Trim());
+                        querySql += IastSearchHelper.BuildCaseGlobSqlClause(query, queryCmd, "qCase");
                     }
 
                     string orderExpression;

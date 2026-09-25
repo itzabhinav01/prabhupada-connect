@@ -1418,6 +1418,37 @@
         });
     }
 
+    const IAST_REGEX_MAP = {
+        'a': '[aā]', 'A': '[AĀ]', 'ā': '[aā]', 'Ā': '[AĀ]',
+        'i': '[iī]', 'I': '[IĪ]', 'ī': '[iī]', 'Ī': '[IĪ]',
+        'u': '[uū]', 'U': '[UŪ]', 'ū': '[uū]', 'Ū': '[UŪ]',
+        'r': '[rṛṝ]', 'R': '[RṚṜ]', 'ṛ': '[rṛṝ]', 'Ṛ': '[RṚṜ]', 'ṝ': '[rṛṝ]', 'Ṝ': '[RṚṜ]',
+        'l': '[lḷḹ]', 'L': '[LḶḸ]', 'ḷ': '[lḷḹ]', 'Ḷ': '[LḶḸ]', 'ḹ': '[lḷḹ]', 'Ḹ': '[LḶḸ]',
+        'e': '[eē]', 'E': '[EĒ]', 'ē': '[eē]', 'Ē': '[EĒ]',
+        'o': '[oō]', 'O': '[OŌ]', 'ō': '[oō]', 'Ō': '[OŌ]',
+        'm': '[mṁṃ]', 'M': '[MṀṂ]', 'ṁ': '[mṁṃ]', 'Ṁ': '[MṀṂ]', 'ṃ': '[mṁṃ]', 'Ṃ': '[MṀṂ]',
+        'h': '[hḥ]', 'H': '[HḤ]', 'ḥ': '[hḥ]', 'Ḥ': '[HḤ]',
+        'n': '[nñṅṇ]', 'N': '[NÑṄṆ]', 'ñ': '[nñṅṇ]', 'Ñ': '[NÑṄṆ]', 'ṅ': '[nñṅṇ]', 'Ṅ': '[NÑṄṆ]', 'ṇ': '[nñṅṇ]', 'Ṇ': '[NÑṄṆ]',
+        't': '[tṭ]', 'T': '[TṬ]', 'ṭ': '[tṭ]', 'Ṭ': '[TṬ]',
+        'd': '[dḍ]', 'D': '[DḌ]', 'ḍ': '[dḍ]', 'Ḍ': '[DḌ]',
+        's': '[sśṣ]', 'S': '[SŚṢ]', 'ś': '[sśṣ]', 'Ś': '[SŚṢ]', 'ṣ': '[sśṣ]', 'Ṣ': '[SŚṢ]'
+    };
+
+    function buildIastRegexPattern(term) {
+        let res = '';
+        for (let i = 0; i < term.length; i++) {
+            const ch = term[i];
+            if (IAST_REGEX_MAP[ch]) {
+                res += IAST_REGEX_MAP[ch];
+            } else if (/[.*+?^${}()|[\]\\]/.test(ch)) {
+                res += '\\' + ch;
+            } else {
+                res += ch;
+            }
+        }
+        return res;
+    }
+
     function findSearch(query, options = {}) {
         clearFindSearch();
         if (!query || query.trim().length === 0) {
@@ -1444,18 +1475,23 @@
             }
         );
 
-        const escapedTerm = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const iastPattern = buildIastRegexPattern(trimmed);
         const patternStr = matchWord
-            ? `(?:(?<=^|[^\\p{L}\\p{N}_])|(?<=\\b))${escapedTerm}(?=(?:[^\\p{L}\\p{N}_]|$|\\b))`
-            : escapedTerm;
+            ? `(?:(?<=^|[^\\p{L}\\p{N}_])|(?<=\\b))${iastPattern}(?=(?:[^\\p{L}\\p{N}_]|$|\\b))`
+            : iastPattern;
         const flags = (matchCase ? 'g' : 'gi') + 'u';
+
+        let testRegex;
+        try {
+            testRegex = new RegExp(iastPattern, (matchCase ? '' : 'i') + 'u');
+        } catch (e) {
+            testRegex = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), matchCase ? '' : 'i');
+        }
 
         const nodesToProcess = [];
         let currentNode;
         while ((currentNode = walker.nextNode())) {
-            const textToTest = matchCase ? currentNode.textContent : currentNode.textContent.toLowerCase();
-            const termToTest = matchCase ? trimmed : trimmed.toLowerCase();
-            if (textToTest.includes(termToTest)) {
+            if (testRegex.test(currentNode.textContent)) {
                 nodesToProcess.push(currentNode);
             }
         }

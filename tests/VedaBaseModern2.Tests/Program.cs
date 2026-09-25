@@ -240,6 +240,19 @@ class Program
 
         var (boolNotRes, boolNotCount) = await repo.SearchAsync("krishna NOT maya", limit: 10);
         Assert(boolNotRes != null && boolNotCount > 0, "Boolean NOT query 'krishna NOT maya'", $"Found: {boolNotCount}");
+
+        // IAST Neutrality Tests: plain English matches IAST even with isExactWord & isExactCase
+        var (plainBhunjanaRes, plainBhunjanaCount) = await repo.SearchAsync("bhunjana", bookKey: "SB", isExactWord: true, isExactCase: true);
+        Assert(plainBhunjanaCount == 15, "Plain English 'bhunjana' in SB with Match Exact Word & Match Case matches 15 verses", $"Found: {plainBhunjanaCount}");
+
+        var (iastBhunjanaRes, iastBhunjanaCount) = await repo.SearchAsync("bhuñjāna", bookKey: "SB", isExactWord: true, isExactCase: true);
+        Assert(iastBhunjanaCount == 15, "IAST 'bhuñjāna' in SB with Match Exact Word & Match Case matches identical 15 verses", $"Found: {iastBhunjanaCount}");
+
+        var (capBhunjanaRes, capBhunjanaCount) = await repo.SearchAsync("Bhunjana", bookKey: "SB", isExactWord: true, isExactCase: true);
+        Assert(capBhunjanaCount == 0, "Capitalized 'Bhunjana' with Match Case returns 0 because verses have lowercase 'bhuñjāna'", $"Found: {capBhunjanaCount}");
+
+        var (krsnaCaseRes, krsnaCaseCount) = await repo.SearchAsync("krsna", bookKey: "BG", isExactWord: true, isExactCase: true);
+        Assert(krsnaCaseCount > 0, "Plain English 'krsna' in BG matches 'kṛṣṇa' with Match Case & Match Exact Word", $"Found: {krsnaCaseCount}");
     }
 
     private static async Task TestConcordanceServiceAsync(string corpusDb)
@@ -250,6 +263,11 @@ class Program
         var result1 = await concordance.LookupWordAsync("dharmakṣetre");
         Assert(result1.TotalCount > 0, "Concordance finds occurrences of 'dharmakṣetre'", $"Count: {result1.TotalCount}");
         Assert(result1.BookGroups.Any(g => g.BookKey == "BG"), "Concordance 'dharmakṣetre' matches in Bhagavad-gītā");
+
+        // Lookup plain English 'bhunjana' finds IAST 'bhuñjāna'
+        var resultBhunjana = await concordance.LookupWordAsync("bhunjana");
+        Assert(resultBhunjana.TotalCount > 0, "Concordance finds occurrences of plain English 'bhunjana'", $"Count: {resultBhunjana.TotalCount}");
+        Assert(resultBhunjana.AllMatches.Any(m => m.Snippet.Contains("bhuñjāna")), "Concordance 'bhunjana' successfully matches IAST lemma 'bhuñjāna'");
 
         // Lookup 'prapadyate'
         var result2 = await concordance.LookupWordAsync("prapadyate");

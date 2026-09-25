@@ -61,7 +61,7 @@ namespace VedaBaseModern.Core.Services
                     command.Parameters.AddWithValue("@ftsQuery", ftsQuery);
                     command.Parameters.AddWithValue("@limit", maxResults);
 
-                    var wordBoundaryRegex = new Regex($@"\b{Regex.Escape(cleanTerm)}\b", RegexOptions.IgnoreCase);
+                    var wordBoundaryRegex = new Regex($@"\b{IastSearchHelper.ToIastRegexPattern(cleanTerm)}\b", RegexOptions.IgnoreCase);
 
                     using var reader = await command.ExecuteReaderAsync();
                     while (await reader.ReadAsync())
@@ -245,11 +245,26 @@ namespace VedaBaseModern.Core.Services
         private static string ExtractSnippet(string fullText, string term, int contextChars = 50)
         {
             if (string.IsNullOrEmpty(fullText)) return string.Empty;
-            int idx = fullText.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+            int idx = -1;
+            int matchLen = term.Length;
+            try
+            {
+                var match = Regex.Match(fullText, IastSearchHelper.ToIastRegexPattern(term), RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    idx = match.Index;
+                    matchLen = match.Length;
+                }
+            }
+            catch
+            {
+                idx = fullText.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+            }
+
             if (idx < 0) return fullText.Length > 100 ? fullText.Substring(0, 100) + "..." : fullText;
 
             int start = Math.Max(0, idx - contextChars);
-            int end = Math.Min(fullText.Length, idx + term.Length + contextChars);
+            int end = Math.Min(fullText.Length, idx + matchLen + contextChars);
 
             string snippet = fullText.Substring(start, end - start).Trim();
             if (start > 0) snippet = "..." + snippet;
