@@ -3,6 +3,7 @@ import os
 import sys
 import sqlite3
 import shutil
+import json
 from datetime import datetime
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -30,11 +31,19 @@ BALARAM_MAP = {
     r"\'93": '"', r"\'94": '"',
 }
 
+KNOWN_TITLE_FIXES = {
+    "Sri Sri Gurv-astakaŚrī Śrī Gurv-aṣṭaka": "Śrī Śrī Gurv-aṣṭaka",
+    "Arunodaya-kirtana I Audilo ArunaSVA 2: Aruṇodaya-kīrtana I": "Aruṇodaya-kīrtana I",
+    "Arunodaya-kirtana I Audilo ArunaSVA 2: Aruṇodaya-kīrtana II": "Aruṇodaya-kīrtana II",
+    "Vidyara VilaseVidyāra Vilāse": "Vidyāra Vilāse",
+}
+
 def decode_text(t):
     if not t:
         return ""
     for k, v in BALARAM_MAP.items():
         t = t.replace(k, v)
+    t = re.sub(r'\\pard\b[^\s\\{}]*', '', t)
     t = re.sub(r'\\\*[a-zA-Z]+(?:\d+)?', '', t)
     t = re.sub(r'\\[a-zA-Z]+(?:-?[0-9]+)?\s?', '', t)
     t = re.sub(r"\\'[0-9a-fA-F]{2}", '', t)
@@ -47,8 +56,7 @@ def clean_rtf_block(rtf_text):
     rtf_text = re.sub(r'([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])\r?\n([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])', r'\1\2', rtf_text)
     rtf_text = rtf_text.replace(r'\line', ' ')
     rtf_text = re.sub(r'\\pard\b[^\s\\{}]*', '', rtf_text)
-    rtf_text = re.sub(r'\\par\b', '___PAR_BREAK___', rtf_text)
-    paras = rtf_text.split('___PAR_BREAK___')
+    paras = re.split(r'\\par(?![a-zA-Z])', rtf_text)
     cleaned = []
     for p in paras:
         p = re.sub(r'\\\*[a-zA-Z]+(?:\d+)?', '', p)
@@ -61,13 +69,181 @@ def clean_rtf_block(rtf_text):
             cleaned.append(p)
     return cleaned
 
+def clean_title_string(raw):
+    t = decode_text(raw)
+    if '*' in t:
+        t = t.split('*')[-1].strip()
+    for k, v in KNOWN_TITLE_FIXES.items():
+        if k in t:
+            t = t.replace(k, v)
+    t = re.sub(r'^SVA(?:\s+\d+)?:?\s*', '', t).strip()
+    t = re.sub(r'^\*?[A-Za-z0-9\s\-_:\'\(\)]+\*+(?=[A-ZŚ])', '', t).strip()
+    return t
+
+def parse_sva_song_chunk(chunk):
+    raw_paras = re.split(r'\\par(?![a-zA-Z])', chunk)
+    banner = ""
+    subtitle = ""
+    stanzas = []
+    current_stanza = None
+    state = 'INIT'
+    purport_paras = []
+
+    for p in raw_paras:
+        sm = re.search(r'\\s(\d+)', p)
+        style = int(sm.group(1)) if sm else -1
+        txt = decode_text(p)
+        if not txt:
+            continue
+
+        if style == 489:
+            pts = [decode_text(x) for x in p.split(r'\line') if decode_text(x)]
+            if pts:
+                banner = pts[0]
+                if '*' in banner:
+                    banner = banner.split('*')[-1].strip()
+                if len(pts) > 1:
+                    subtitle = pts[1]
+            else:
+                banner = txt
+            continue
+
+        if 'Audio' in txt and len(txt) < 15:
+            continue
+
+        is_text_label = bool(re.match(r'^Text\s+(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen|Eighteen|Nineteen|Twenty|\d+)', txt, re.IGNORECASE))
+        is_syn_hdr = txt.strip().upper() == 'SYNONYMS'
+        is_trans_hdr = txt.strip().upper() == 'TRANSLATION'
+        is_purport_hdr = txt.strip().upper() == 'PURPORT' or bool(re.search(r'Purport\s+by\s+His\s+Divine\s+Grace', txt, re.IGNORECASE))
+
+        if is_purport_hdr or (style in (181, 1456, 1709) and 'purport' in txt.lower() and len(txt) < 80):
+            state = 'PURPORT'
+            if current_stanza:
+                stanzas.append(current_stanza)
+                current_stanza = None
+            continue
+
+        if state == 'PURPORT':
+            clean_p = re.sub(r'^\*?[A-Za-z0-9\s\-_:\'\(\)]+\*+(?=[A-ZŚ])', '', txt)
+            purport_paras.append(clean_p)
+            continue
+
+        if is_text_label:
+            if current_stanza:
+                stanzas.append(current_stanza)
+            current_stanza = {
+                'label': txt,
+                'lines': [],
+                'synonyms': '',
+                'translation': ''
+            }
+            state = 'LINES'
+            continue
+
+        if is_syn_hdr:
+            state = 'SYNONYMS'
+            continue
+
+        if is_trans_hdr:
+            state = 'TRANSLATION'
+            continue
+
+        if style == 9:
+            if current_stanza is None:
+                current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
+                state = 'LINES'
+            current_stanza['lines'].append(txt)
+            continue
+
+        if state == 'SYNONYMS' or style == 1962:
+            if current_stanza is None:
+                current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
+            if current_stanza['synonyms']:
+                current_stanza['synonyms'] += ' ' + txt
+            else:
+                current_stanza['synonyms'] = txt
+            continue
+
+        if state == 'TRANSLATION' or style == 2087:
+            if current_stanza is None:
+                current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
+            if current_stanza['translation']:
+                current_stanza['translation'] += ' ' + txt
+            else:
+                current_stanza['translation'] = txt
+            continue
+
+        if current_stanza and current_stanza.get('translation'):
+            purport_paras.append(txt)
+        else:
+            purport_paras.append(txt)
+
+    if current_stanza:
+        stanzas.append(current_stanza)
+
+    return banner, subtitle, stanzas, purport_paras
+
+def parse_tmg_chunk(chunk, raw_title):
+    paras = re.split(r'\\par(?![a-zA-Z])', chunk)
+    stanzas = []
+    current_stanza = None
+    purport_paras = []
+
+    clean_t = decode_text(raw_title)
+    if '*' in clean_t:
+        clean_t = clean_t.split('*')[-1].strip()
+
+    for p in paras:
+        sm = re.search(r'\\s(\d+)', p)
+        style = int(sm.group(1)) if sm else -1
+        txt = decode_text(p)
+        if not txt:
+            continue
+
+        is_num = bool(re.match(r'^\(?\d+\)?$', txt))
+        if is_num or style == 1680:
+            if current_stanza:
+                stanzas.append(current_stanza)
+            current_stanza = {
+                'label': f"Text {txt.strip('() ')}",
+                'lines': [],
+                'synonyms': '',
+                'translation': ''
+            }
+            continue
+
+        if style in (2314, 9):
+            if current_stanza is None:
+                current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
+            current_stanza['lines'].append(txt)
+            continue
+
+        if style in (2087, 1522):
+            if current_stanza is None:
+                current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
+            if current_stanza['translation']:
+                current_stanza['translation'] += ' ' + txt
+            else:
+                current_stanza['translation'] = txt
+            continue
+
+        purport_paras.append(txt)
+
+    if current_stanza:
+        stanzas.append(current_stanza)
+
+    return clean_t, stanzas, purport_paras
+
+# ======================================================================
+# INGESTION ROUTINES
+# ======================================================================
+
 def ingest_btg(conn):
     rtf_path = r"Database\sources\btg 1944-1960.rtf"
     print(f"\n--- Ingesting Back to Godhead (1944–1960) from {rtf_path} ---")
     with open(rtf_path, 'r', encoding='latin-1', errors='ignore') as f:
         data = f.read()
 
-    # Find volume markers
     vol_matches = list(re.finditer(r'\{\\v\\f0\\fs20\\cf6\s*([^\r\n\}]+)', data))
     art_matches = list(re.finditer(r'\{\\v\\f0\\fs20\\cf7\s*([^\r\n\}]+)', data))
     print(f"Found {len(vol_matches)} issues/volumes and {len(art_matches)} articles.")
@@ -89,7 +265,6 @@ def ingest_btg(conn):
         len(art_matches)
     ))
 
-    # Helper to find current volume for article pos
     def get_vol_for_pos(pos):
         current_vol = "1944–1960"
         for vm in vol_matches:
@@ -104,9 +279,8 @@ def ingest_btg(conn):
         seq = i + 1
         raw_title = m.group(1).strip()
         art_title = decode_text(raw_title)
-        # clean any leading "BTGPY1a: " prefix for cleaner display
         clean_title = re.sub(r'^BTG[A-Z0-9]+:\s*', '', art_title)
-        
+
         start_pos = m.end()
         end_pos = art_matches[i + 1].start() if i + 1 < len(art_matches) else len(data)
         art_rtf = data[start_pos:end_pos]
@@ -167,34 +341,38 @@ def ingest_sva(conn):
     with open(rtf_path, 'r', encoding='latin-1', errors='ignore') as f:
         data = f.read()
 
-    idx_songs = data.find(r"{\*\\bkmkstart Songs of the Vaisnava Acaryas}")
-    if idx_songs == -1:
-        idx_songs = data.find("Songs of the Vaisnava Acaryas")
-    idx_temple = data.find("Temple Mantra Guide")
+    idx_songs = data.find('Songs of the Vaisnava Acaryas')
+    idx_temple = data.find('Temple Mantra Guide')
     songs_data = data[idx_songs:idx_temple] if idx_temple != -1 else data[idx_songs:]
 
-    # Match cf7 for Foreword & Introduction and major parts
-    # Match cf8 for all song entries
-    cf7_matches = list(re.finditer(r'\{\\v\\f0\\fs20\\cf7\s*([^\r\n\}]+)', songs_data))
-    cf8_matches = list(re.finditer(r'\{\\v\\f0\\fs20\\cf8\s*([^\r\n\}]+)', songs_data))
+    # Match all s7 headers
+    s7_matches = list(re.finditer(r'\\s7\s+\\qr\s*\{(.*?)\\par(?![a-zA-Z])\s*\}', songs_data, re.DOTALL))
+
+    # Also capture Foreword and Introduction before match 0
+    first_s7 = s7_matches[0].start() if s7_matches else len(songs_data)
+    pre_chunk = songs_data[:first_s7]
 
     all_entries = []
-    # Add Foreword and Introduction from cf7
-    for m in cf7_matches:
-        t = decode_text(m.group(1))
-        if "Foreword" in t or "Introduction" in t:
-            all_entries.append((m.start(), m.end(), t, "Front Matter"))
+    # Check Foreword
+    idx_fwd = pre_chunk.find(r'Foreword')
+    idx_intro = pre_chunk.find(r'Introduction')
 
-    # Add all songs from cf8
-    for m in cf8_matches:
-        t = decode_text(m.group(1))
-        all_entries.append((m.start(), m.end(), t, "Song"))
+    if idx_fwd != -1:
+        fwd_end = idx_intro if idx_intro != -1 else len(pre_chunk)
+        all_entries.append((idx_fwd, fwd_end, "Foreword", "Front Matter"))
+    if idx_intro != -1:
+        all_entries.append((idx_intro, len(pre_chunk), "Introduction", "Front Matter"))
 
-    all_entries.sort(key=lambda x: x[0])
+    for m in s7_matches:
+        raw_h = m.group(1)
+        clean_t = clean_title_string(raw_h)
+        all_entries.append((m.start(), m.end(), clean_t, "Song" if "purport" not in clean_t.lower() else "Purport"))
+
     print(f"Found {len(all_entries)} entries in Songs of the Vaiṣṇava Ācāryas.")
 
     cur = conn.cursor()
 
+    # SVA is categorized as 'Books' under Prabhupada's Works!
     cur.execute("""
         INSERT OR REPLACE INTO Books (BookKey, Abbreviation, Edition, Title, Category, CorpusId, Author, CanonicalOrder, TotalRecords)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -203,55 +381,99 @@ def ingest_sva(conn):
         'SVA',
         'Original Songbook with Word-for-Word Meanings',
         'Songs of the Vaiṣṇava Ācāryas',
-        'Other Works',
+        'Books',
         'SVA',
-        'Vaiṣṇava Ācāryas',
+        'His Divine Grace A.C. Bhaktivedanta Swami Prabhupāda / Vaiṣṇava Ācāryas',
         48,
         len(all_entries)
     ))
 
-    # Helper to determine canonical section number (1, 2, 3, 4, or 0 for Intro)
+    sec2_pos = 340999
+    sec3_pos = 791998
+    sec4_pos = 1044624
+
     def determine_section(title, pos):
+        if "Foreword" in title or "Introduction" in title:
+            return 1
         m = re.search(r'SVA\s*(\d)', title)
         if m:
             return int(m.group(1))
-        if "Standard Prayers" in title or "Praṇāma" in title or "Gurv-aṣṭaka" in title or "Bhaktivinoda" in title:
-            if "SVA 2" in title: return 2
-            if "SVA 3" in title: return 3
-            if "SVA 4" in title: return 4
+        if pos < sec2_pos:
             return 1
-        return 1
+        elif pos < sec3_pos:
+            return 2
+        elif pos < sec4_pos:
+            return 3
+        else:
+            return 4
 
-    SECTION_LABELS = {
-        1: "1: Standard Prayers",
-        2: "2: Songs of Śrīla Bhaktivinoda Ṭhākura",
-        3: "3: Songs of Śrīla Narottama dāsa Ṭhākura",
-        4: "4: Songs of Other Vaiṣṇava Ācāryas"
-    }
-
-    inserted = 0
     sec_counters = {1: 0, 2: 0, 3: 0, 4: 0}
+    inserted = 0
 
     for i, entry in enumerate(all_entries):
-        start_p, end_p, raw_title, entry_type = entry
+        start_p, end_p, clean_t, entry_type = entry
         next_start = all_entries[i + 1][0] if i + 1 < len(all_entries) else len(songs_data)
-        entry_rtf = songs_data[end_p:next_start]
-        paras = clean_rtf_block(entry_rtf)
+        chunk = songs_data[end_p:next_start]
 
-        full_text = "\n\n".join(paras)
-        opening_quote = paras[0] if paras else None
-
-        clean_title = re.sub(r'^\*?\s*SVA\s*\d*:\s*', '', raw_title).strip()
-        clean_title = re.sub(r'^\*?\s*', '', clean_title).strip()
-
-        sec_num = determine_section(raw_title, start_p)
+        # Determine section number
+        sec_num = determine_section(clean_t, start_p)
         sec_counters[sec_num] = sec_counters.get(sec_num, 0) + 1
         song_idx = sec_counters[sec_num]
 
         record_key = f"SVA-{sec_num}.{song_idx}"
         reference = f"SVA {sec_num}.{song_idx}"
-        sec_label = SECTION_LABELS.get(sec_num, f"Section {sec_num}")
-        display_title = f"{sec_label} — {clean_title}"
+
+        banner, subtitle, stanzas, purports = parse_sva_song_chunk(chunk)
+
+        is_purport = "purport" in clean_t.lower()
+        is_front_matter = entry_type == "Front Matter" or "Glimpse" in clean_t
+
+        if is_purport:
+            record_type = 'Purport'
+            purport_text = "\n\n".join(purports)
+            devanagari = None
+            transliteration = None
+            synonyms = None
+            translation = None
+            purports_field = purport_text
+        elif is_front_matter or len(stanzas) == 0:
+            record_type = 'Narrative'
+            narrative_text = "\n\n".join(clean_rtf_block(chunk))
+            devanagari = None
+            transliteration = None
+            synonyms = None
+            translation = None
+            purports_field = narrative_text
+        else:
+            record_type = 'Song'
+            # Format stanzas
+            all_lines = []
+            all_syns = []
+            all_trans = []
+            for st in stanzas:
+                lbl = st.get('label', '')
+                if lbl:
+                    all_lines.append(f"[{lbl}]")
+                all_lines.extend(st.get('lines', []))
+                if st.get('synonyms'):
+                    all_syns.append(st['synonyms'])
+                if st.get('translation'):
+                    all_trans.append(st['translation'])
+
+            transliteration = "\n".join(all_lines)
+            synonyms = "\n\n".join(all_syns)
+            translation = "\n\n".join(all_trans)
+            purport_commentary = "\n\n".join(purports)
+
+            # Package structured song JSON for rich rendering
+            song_obj = {
+                "type": "song",
+                "bannerTitle": banner or clean_t,
+                "subtitle": subtitle,
+                "stanzas": stanzas,
+                "purport": purport_commentary
+            }
+            purports_field = json.dumps(song_obj, ensure_ascii=False)
 
         cur.execute("""
             INSERT OR REPLACE INTO Records (
@@ -264,17 +486,19 @@ def ingest_sva(conn):
             'SVA',
             i + 1,
             f"SVA-SEC-{sec_num}",
-            'Song',
+            record_type,
             reference,
             'Active',
-            display_title,
+            clean_t,
             None,
-            None,
-            None,
-            opening_quote,
-            full_text
+            transliteration,
+            synonyms,
+            translation,
+            purports_field
         ))
 
+        # Index in SearchIndex for lightning full-text search
+        search_purport = "\n\n".join(purports) if not is_purport and not is_front_matter else purports_field
         cur.execute("""
             INSERT OR REPLACE INTO SearchIndex (
                 RecordKey, BookKey, Reference, Devanagari, Transliteration,
@@ -285,14 +509,14 @@ def ingest_sva(conn):
             'SVA',
             reference,
             None,
-            None,
-            None,
-            opening_quote,
-            full_text
+            transliteration,
+            synonyms,
+            translation,
+            search_purport
         ))
         inserted += 1
 
-    print(f"[SUCCESS] Ingested {inserted} songs/chapters of Songs of the Vaiṣṇava Ācāryas!")
+    print(f"[SUCCESS] Ingested {inserted} items into Songs of the Vaiṣṇava Ācāryas!")
 
 def ingest_tmg(conn):
     rtf_path = r"Database\sources\temple mantra guide.rtf"
@@ -301,15 +525,17 @@ def ingest_tmg(conn):
         data = f.read()
 
     idx_temple = data.find("Temple Mantra Guide")
-    temple_data = data[idx_temple:]
-    
-    # Body starts around offset 12000 where the actual mantra texts are defined with \s489
-    body = temple_data[12000:]
-    s489_matches = list(re.finditer(r'\\s489\s+([^\r\n\{]+)?\{([^\}]+)\}', body))
+    tmg_part = data[idx_temple:]
+    matches = list(re.finditer(r'\\s134\b', tmg_part))
+    last_toc = matches[-1].end() if matches else 0
+    body = tmg_part[last_toc:]
+
+    s489_matches = list(re.finditer(r'\\s489\s+.*?\{(.*?)\\par(?![a-zA-Z])\s*\}', body, re.DOTALL))
     print(f"Found {len(s489_matches)} mantras/prayers in Temple Mantra Guide body.")
 
     cur = conn.cursor()
 
+    # TMG categorized as 'Books' under Prabhupada's Works!
     cur.execute("""
         INSERT OR REPLACE INTO Books (BookKey, Abbreviation, Edition, Title, Category, CorpusId, Author, CanonicalOrder, TotalRecords)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -318,7 +544,7 @@ def ingest_tmg(conn):
         'TMG',
         'Standard ISKCON Temple Edition',
         'Temple Mantra Guide',
-        'Other Works',
+        'Books',
         'TMG',
         'His Divine Grace A.C. Bhaktivedanta Swami Prabhupāda',
         49,
@@ -342,21 +568,21 @@ def ingest_tmg(conn):
         "Vaiṣṇava-praṇāma",
         "Śrī Śrī Śikṣāṣṭaka",
         "Greeting The Deities",
-        "Śrī Guru-vandanā The Worship of Śrī Guru",
+        "Śrī Guru-vandanā",
         "Jaya Rādhā-Mādhava",
         "Verses Recited Before Śrīmad-Bhāgavatam Class",
         "Śrī Śrī Ṣaḍ-gosvāmy-aṣṭaka",
         "Verses Recited Before Reading Kṛṣṇa Book",
         "Other Kīrtana Chants",
         "Nāma-saṅkīrtana",
-        "Purport by His Divine Grace A. C. Bhaktivedanta Swami Prabhupāda",
+        "Purport to Nāma-saṅkīrtana",
         "Śrī Nāma-kīrtana",
         "Gaura-ārati",
         "Sapārṣada-bhagavad-viraha-janita-vilāpa",
         "Śrī Dāmodarāṣṭaka",
         "Śrī Jagannāthāṣṭaka",
-        "Prayers for offering Prasadam",
-        "Prayers for honoring Prasadam"
+        "Prayers for Offering Prasādam",
+        "Prayers for Honoring Prasādam"
     ]
 
     inserted = 0
@@ -364,16 +590,43 @@ def ingest_tmg(conn):
         num = i + 1
         start_p = m.end()
         end_p = s489_matches[i + 1].start() if i + 1 < len(s489_matches) else len(body)
-        mantra_rtf = body[start_p:end_p]
-        paras = clean_rtf_block(mantra_rtf)
-
-        full_text = "\n\n".join(paras)
-        opening_quote = paras[0] if paras else None
+        chunk = body[start_p:end_p]
 
         title = TMG_TITLES[num] if num < len(TMG_TITLES) else f"Mantra {num}"
         record_key = f"TMG-{num}"
         reference = f"TMG {num}"
-        display_title = f"{num}. {title}"
+
+        clean_t, stanzas, purports = parse_tmg_chunk(chunk, m.group(1))
+
+        if len(stanzas) > 0 and any(len(s.get('lines', [])) > 0 for s in stanzas):
+            record_type = 'Song'
+            all_lines = []
+            all_trans = []
+            for st in stanzas:
+                lbl = st.get('label', '')
+                if lbl:
+                    all_lines.append(f"[{lbl}]")
+                all_lines.extend(st.get('lines', []))
+                if st.get('translation'):
+                    all_trans.append(st['translation'])
+
+            transliteration = "\n".join(all_lines)
+            translation = "\n\n".join(all_trans)
+            purport_commentary = "\n\n".join(purports)
+
+            song_obj = {
+                "type": "song",
+                "bannerTitle": title,
+                "subtitle": "",
+                "stanzas": stanzas,
+                "purport": purport_commentary
+            }
+            purports_field = json.dumps(song_obj, ensure_ascii=False)
+        else:
+            record_type = 'Narrative' if "Purport" not in title else 'Purport'
+            transliteration = None
+            translation = None
+            purports_field = "\n\n".join(purports)
 
         cur.execute("""
             INSERT OR REPLACE INTO Records (
@@ -386,17 +639,18 @@ def ingest_tmg(conn):
             'TMG',
             num,
             'TMG-ROOT',
-            'Verse',
+            record_type,
             reference,
             'Active',
-            display_title,
+            title,
             None,
+            transliteration,
             None,
-            None,
-            opening_quote,
-            full_text
+            translation,
+            purports_field
         ))
 
+        search_purport = "\n\n".join(purports) if record_type == 'Song' else purports_field
         cur.execute("""
             INSERT OR REPLACE INTO SearchIndex (
                 RecordKey, BookKey, Reference, Devanagari, Transliteration,
@@ -407,10 +661,10 @@ def ingest_tmg(conn):
             'TMG',
             reference,
             None,
+            transliteration,
             None,
-            None,
-            opening_quote,
-            full_text
+            translation,
+            search_purport
         ))
         inserted += 1
 
@@ -418,12 +672,17 @@ def ingest_tmg(conn):
 
 def main():
     db_path = r"Database\prabhupada_corpus.db"
-    backup_path = f"Database/prabhupada_corpus_pre_ingest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    backup_path = f"Database/prabhupada_corpus_pre_refine_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
     print(f"Creating safety backup at: {backup_path}")
     shutil.copyfile(db_path, backup_path)
 
     conn = sqlite3.connect(db_path)
     try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM Records WHERE BookKey IN ('BTG', 'SVA', 'TMG');")
+        cur.execute("DELETE FROM SearchIndex WHERE BookKey IN ('BTG', 'SVA', 'TMG');")
+        conn.commit()
+        print("Cleared previous records for BTG, SVA, and TMG.")
         ingest_btg(conn)
         ingest_sva(conn)
         ingest_tmg(conn)

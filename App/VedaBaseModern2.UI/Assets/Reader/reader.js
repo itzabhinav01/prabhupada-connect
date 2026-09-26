@@ -1215,6 +1215,84 @@
         `;
     }
 
+    function renderSongCardHtml(record, songData, options = {}, hlMap = {}, notes = [], isSingleVerse = true) {
+        const showTranslit = options.showTransliteration !== false;
+        const showSynonyms = options.showSynonyms !== false;
+        const showPurport = options.showPurport !== false;
+        const showTranslation = options.showTranslation !== false;
+
+        const bannerTitle = songData.bannerTitle || record.Title || record.Reference;
+        const subtitle = songData.subtitle || '';
+        const stanzas = songData.stanzas || [];
+        const purport = songData.purport || '';
+
+        let html = `
+        <article class="verse-card single-verse song-card" id="verse-${escapeHtml(record.RecordKey)}" data-record-key="${escapeHtml(record.RecordKey)}">
+            <header class="song-header-banner">
+                <div class="song-header-reference">${escapeHtml(record.Reference || record.RecordKey)}</div>
+                <h1 class="song-header-title">${escapeHtml(bannerTitle)}</h1>
+                ${subtitle ? `<div class="song-header-subtitle">${escapeHtml(subtitle)}</div>` : ''}
+            </header>
+        `;
+
+        if (stanzas && stanzas.length > 0) {
+            html += `<div class="song-stanzas-container">`;
+            for (let i = 0; i < stanzas.length; i++) {
+                const st = stanzas[i];
+                const label = st.label || (stanzas.length > 1 ? `Text ${i + 1}` : '');
+                const lines = st.lines || [];
+                const syns = st.synonyms || '';
+                const trans = st.translation || '';
+
+                html += `
+                <div class="song-stanza-block" id="stanza-${escapeHtml(record.RecordKey)}-${i + 1}">
+                    ${label ? `<div class="song-stanza-label">${escapeHtml(label)}</div>` : ''}
+                `;
+
+                if (lines.length > 0 && showTranslit) {
+                    const linesHtml = lines.map(line => {
+                        let lHtml = applyHighlights(line, hlMap['transliteration']);
+                        lHtml = linkifyScriptureReferences(lHtml);
+                        return `<div class="song-verse-line">${lHtml}</div>`;
+                    }).join('');
+                    html += `<div class="song-verse-stanza">${linesHtml}</div>`;
+                }
+
+                if (syns && showSynonyms) {
+                    html += `
+                    <div class="song-section-label">SYNONYMS</div>
+                    <div class="verse-synonyms song-synonyms">${formatSynonyms(syns, hlMap['synonyms'])}</div>
+                    `;
+                }
+
+                if (trans && showTranslation) {
+                    const transHl = linkifyScriptureReferences(applyHighlights(trans, hlMap['translation']));
+                    html += `
+                    <div class="song-section-label">TRANSLATION</div>
+                    <div class="verse-translation song-translation">${transHl}</div>
+                    `;
+                }
+
+                html += `</div>`;
+            }
+            html += `</div>`;
+        }
+
+        if (purport && showPurport) {
+            html += `
+            <div class="section-label song-purport-label">Purport</div>
+            <div class="verse-purport song-purport-body" data-field="Purport">${formatPurportParagraphs(purport, hlMap['purport'], false)}</div>
+            `;
+        }
+
+        if (isSingleVerse) {
+            html += renderNotesSectionHtml(record.RecordKey, record.Reference || record.RecordKey, notes);
+        }
+
+        html += `</article>`;
+        return html;
+    }
+
     // ---- Render Single Verse ----
 
     function renderVerse(record, options = {}, highlights = [], notes = []) {
@@ -1228,8 +1306,23 @@
         const showPronunciation = options.showPronunciationGuide !== false;
 
         const hlMap = groupHighlightsByField(highlights, record.RecordKey);
-        const isProseRecord = record.BookKey === 'SPL' || (!record.Devanagari && !record.Transliteration && !record.Synonyms && (!record.Translation || record.BookKey === 'SPL'));
-        const displayTitle = record.Title || record.Reference || record.RecordKey;
+
+        let songData = null;
+        if (record.Purports && (record.Purports.startsWith('{"type":"song"') || record.Purports.startsWith('{"type": "song"'))) {
+            try {
+                songData = JSON.parse(record.Purports);
+            } catch (e) { }
+        }
+
+        if (songData) {
+            contentEl.innerHTML = renderSongCardHtml(record, songData, options, hlMap, notes, true);
+            window.scrollTo({ top: 0, behavior: 'instant' });
+            return;
+        }
+
+        const isPurportRecord = record.RecordType === 'Purport';
+        const isProseRecord = isPurportRecord || record.BookKey === 'SPL' || (!record.Devanagari && !record.Transliteration && !record.Synonyms && (!record.Translation || record.BookKey === 'SPL'));
+        const displayTitle = isPurportRecord ? `${record.Reference || record.RecordKey} — ${record.Title || ''}` : (record.Title || record.Reference || record.RecordKey);
         const hasDistinctCitation = Boolean(
             !isProseRecord &&
             record.Title &&
@@ -1331,8 +1424,22 @@
 
         for (const record of records) {
             const hlMap = groupHighlightsByField(highlights, record.RecordKey);
-            const isProseRecord = record.BookKey === 'SPL' || (!record.Devanagari && !record.Transliteration && !record.Synonyms && (!record.Translation || record.BookKey === 'SPL'));
-            const displayTitle = isProseRecord ? (record.Title || record.Reference || record.RecordKey) : (record.Reference || record.RecordKey);
+
+            let songData = null;
+            if (record.Purports && (record.Purports.startsWith('{"type":"song"') || record.Purports.startsWith('{"type": "song"'))) {
+                try {
+                    songData = JSON.parse(record.Purports);
+                } catch (e) { }
+            }
+
+            if (songData) {
+                html += renderSongCardHtml(record, songData, options, hlMap, notes, false);
+                continue;
+            }
+
+            const isPurportRecord = record.RecordType === 'Purport';
+            const isProseRecord = isPurportRecord || record.BookKey === 'SPL' || (!record.Devanagari && !record.Transliteration && !record.Synonyms && (!record.Translation || record.BookKey === 'SPL'));
+            const displayTitle = isPurportRecord ? `${record.Reference || record.RecordKey} — ${record.Title || ''}` : (isProseRecord ? (record.Title || record.Reference || record.RecordKey) : (record.Reference || record.RecordKey));
             const isSingleProseRecord = isProseRecord && records.length === 1;
             const hasDistinctCitation = Boolean(
                 !isProseRecord &&

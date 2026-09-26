@@ -321,6 +321,10 @@ namespace VedaBaseModern.Core.Repositories
                     {
                         displayRef = $"{displayRef}: {recordTitle}";
                     }
+                    else if ((bk == "SVA" || bk == "TMG" || bk == "BTG") && !string.IsNullOrWhiteSpace(recordTitle))
+                    {
+                        displayRef = $"{displayRef} — {recordTitle}";
+                    }
 
                     chNode.Records.Add(new RecordNode
                     {
@@ -468,6 +472,13 @@ namespace VedaBaseModern.Core.Repositories
             }
             else if (bookKey == "SVA")
             {
+                if (recordTitle != null && (recordTitle.Equals("Foreword", StringComparison.OrdinalIgnoreCase) ||
+                                            recordTitle.Equals("Introduction", StringComparison.OrdinalIgnoreCase) ||
+                                            recordTitle.Contains("Glimpse", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return "Foreword & Introduction";
+                }
+
                 var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^SVA\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (match.Success)
                 {

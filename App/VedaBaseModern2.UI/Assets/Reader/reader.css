@@ -1841,3 +1841,115 @@ body.theme-light #hit-navigation-hud {
     text-align: center;
     font-variant-numeric: tabular-nums;
 }
+
+/* ---- Authentic Folio Views Song & Temple Mantra Formatting ---- */
+.song-card {
+    margin-bottom: 48px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.song-header-banner {
+    background: linear-gradient(135deg, #0d5854 0%, #15736f 100%);
+    color: #ffffff;
+    border-radius: 8px;
+    padding: 22px 24px 18px 24px;
+    text-align: center;
+    margin-bottom: 36px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    border-bottom: 4px solid #b73229;
+}
+
+.song-header-reference {
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    opacity: 0.85;
+    margin-bottom: 6px;
+}
+
+.song-header-title {
+    font-size: 1.65rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+    color: #ffffff;
+    font-family: var(--font-family-serif);
+}
+
+.song-header-subtitle {
+    font-size: 1.08rem;
+    font-style: italic;
+    opacity: 0.92;
+    color: #e0f2f1;
+}
+
+.song-stanzas-container {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.song-stanza-block {
+    padding: 14px 0 20px 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.song-stanza-label {
+    text-align: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #1ea39d;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+}
+
+.song-verse-stanza {
+    text-align: center;
+    font-style: italic;
+    font-size: var(--font-size-translit);
+    line-height: 1.85;
+    margin-bottom: 18px;
+    color: var(--text-primary);
+}
+
+.song-verse-line {
+    margin-bottom: 4px;
+}
+
+.song-section-label {
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.92rem;
+    letter-spacing: 2px;
+    color: #1ea39d;
+    margin-top: 18px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+.song-synonyms {
+    text-align: justify;
+    line-height: 1.7;
+    margin-bottom: 16px;
+    padding: 0 10px;
+    font-size: var(--font-size-synonyms);
+}
+
+.song-translation {
+    text-align: justify;
+    line-height: 1.75;
+    margin-bottom: 16px;
+    padding: 0 10px;
+    font-size: var(--font-size-translation);
+}
+
+.song-purport-label {
+    margin-top: 28px;
+}
+
+.song-purport-body {
+    margin-top: 14px;
+}

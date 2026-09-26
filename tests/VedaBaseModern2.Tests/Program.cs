@@ -631,11 +631,11 @@ Further check [[CC Adi 1.1]] for invocations.";
 
         var svaDesc = registry.GetBook("SVA");
         Assert(svaDesc != null && svaDesc.Abbreviation == "SVA", "BookRegistry contains SVA descriptor");
-        Assert(svaDesc != null && svaDesc.Category == "Other Works", "SVA Category is Other Works");
+        Assert(svaDesc != null && svaDesc.Category == "Books", "SVA Category is Books");
 
         var tmgDesc = registry.GetBook("TMG");
         Assert(tmgDesc != null && tmgDesc.Abbreviation == "TMG", "BookRegistry contains TMG descriptor");
-        Assert(tmgDesc != null && tmgDesc.Category == "Other Works", "TMG Category is Other Works");
+        Assert(tmgDesc != null && tmgDesc.Category == "Books", "TMG Category is Books");
 
         // 2. Sample records retrieval
         var btg1 = await repo.GetRecordAsync("BTG-1");
@@ -713,5 +713,16 @@ Further check [[CC Adi 1.1]] for invocations.";
             }
         }
         Assert(isSortedAZ, "Books in search filters can be ordered in strictly ascending alphabetical order (A–Z)");
+
+        // 8. Song names in library hierarchy
+        var svaBook = hierarchy.FirstOrDefault(b => b.BookKey == "SVA");
+        Assert(svaBook != null, "SVA book found in library hierarchy");
+        var svaRec = svaBook?.Chapters.SelectMany(c => c.Records).FirstOrDefault(r => r.RecordKey == "SVA-2.5");
+        Assert(svaRec != null && svaRec.Reference.Contains("Gurudeva"), "SVA 2.5 record Reference contains song name ('Gurudeva')", svaRec?.Reference);
+
+        var tmgBook = hierarchy.FirstOrDefault(b => b.BookKey == "TMG");
+        Assert(tmgBook != null, "TMG book found in library hierarchy");
+        var tmgRec = tmgBook?.Chapters.SelectMany(c => c.Records).FirstOrDefault(r => r.RecordKey == "TMG-6");
+        Assert(tmgRec != null && tmgRec.Reference.Contains("Gurv"), "TMG 6 record Reference contains mantra name ('Gurv-aṣṭaka')", tmgRec?.Reference);
     }
 }
