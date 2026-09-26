@@ -48,6 +48,9 @@ def decode_text(t):
     t = re.sub(r'\\[a-zA-Z]+(?:-?[0-9]+)?\s?', '', t)
     t = re.sub(r"\\'[0-9a-fA-F]{2}", '', t)
     t = t.replace('{', '').replace('}', '').strip()
+    # Heal hyphenated and unhyphenated mid-word line-breaks from RTF wrapping
+    t = re.sub(r'([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])-\r?\n\s*([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])', r'\1\2', t)
+    t = re.sub(r'([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])\r?\n([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])', r'\1\2', t)
     return re.sub(r'\s+', ' ', t).strip()
 
 def clean_rtf_block(rtf_text):

@@ -743,5 +743,15 @@ Further check [[CC Adi 1.1]] for invocations.";
             var s1Trans = stanzasElem[0].GetProperty("translation").GetString() ?? "";
             Assert(s1Trans.StartsWith("1)"), "TMG-10 Stanza 1 translation starts with '1)'", s1Trans);
         }
+
+        // 11. Mid-word line breaks are healed (e.g. 'afflicted' not 'afflic ted')
+        Assert(tmg6 != null, "TMG-6 retrieved");
+        if (tmg6?.Purports != null)
+        {
+            var doc6 = System.Text.Json.JsonDocument.Parse(tmg6.Purports);
+            var trans6 = doc6.RootElement.GetProperty("stanzas")[0].GetProperty("translation").GetString() ?? "";
+            Assert(trans6.Contains("afflicted"), "TMG-6 Stanza 1 translation contains healed 'afflicted'", trans6);
+            Assert(!trans6.Contains("afflic ted"), "TMG-6 Stanza 1 does not contain broken 'afflic ted'");
+        }
     }
 }
