@@ -116,6 +116,10 @@ namespace VedaBaseModern.Core.Services
             new ReferenceWorkDefinition { BookKey = "MG", DisplayTitle = "Matchless Gift", NumericLevels = 1, LevelNames = new[] { "Chapter" }, Aliases = new[] { "MG", "MATCHLESSGIFT" } },
             new ReferenceWorkDefinition { BookKey = "ROP", DisplayTitle = "Reservoir of Pleasure", NumericLevels = 1, LevelNames = new[] { "Chapter" }, Aliases = new[] { "ROP", "RESERVOIROFPLEASURE" } },
             new ReferenceWorkDefinition { BookKey = "GG", DisplayTitle = "Gītār Gāna", NumericLevels = 1, LevelNames = new[] { "Chapter" }, Aliases = new[] { "GG", "GITARGANA" } },
+            new ReferenceWorkDefinition { BookKey = "SPL", DisplayTitle = "Śrīla Prabhupāda-līlāmṛta", NumericLevels = 1, LevelNames = new[] { "Chapter" }, Aliases = new[] { "SPL", "LILAMRITA", "LILAMRTA", "PRABHUPADALILAMRITA" } },
+            new ReferenceWorkDefinition { BookKey = "BTG", DisplayTitle = "Back to Godhead (1944–1960)", NumericLevels = 1, LevelNames = new[] { "Article" }, Aliases = new[] { "BTG", "BACKTOGODHEAD" } },
+            new ReferenceWorkDefinition { BookKey = "SVA", DisplayTitle = "Songs of the Vaiṣṇava Ācāryas", NumericLevels = 2, LevelNames = new[] { "Section", "Song" }, Aliases = new[] { "SVA", "SONGS", "VAISHNAVASONGS", "SONGSOFVAISHNAVAACARYAS" } },
+            new ReferenceWorkDefinition { BookKey = "TMG", DisplayTitle = "Temple Mantra Guide", NumericLevels = 1, LevelNames = new[] { "Mantra" }, Aliases = new[] { "TMG", "TEMPLEMANTRAS", "MANTRAGUIDE", "TEMPLEMANTRAGUIDE" } },
         };
 
         private static readonly Dictionary<string, ReferenceWorkDefinition> AliasLookup = BuildAliasLookup();

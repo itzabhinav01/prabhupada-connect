@@ -88,6 +88,10 @@ class Program
             // 12. Prabhupada Slokas (SPS), Outside Quotes Mapping & Tiered Canonical Search Tests
             Console.WriteLine("\n[12/12] Testing Prabhupāda Ślokas (SPS), Outside Quotes & Tiered Canonical Search...");
             await TestPrabhupadaSlokasAndCanonicalTieringAsync(corpusDb);
+
+            // 13. Back to Godhead (BTG), Songs of the Vaisnava Acaryas (SVA), Temple Mantra Guide (TMG) & A-Z Multi-Book Filters
+            Console.WriteLine("\n[13/13] Testing BTG, SVA, TMG Ingestion, Breadcrumbs & A–Z Multi-Book Filtering...");
+            await TestBtgSvaTmgAndBookFiltersAsync(corpusDb);
         }
         finally
         {
@@ -611,5 +615,103 @@ Further check [[CC Adi 1.1]] for invocations.";
         var (page2Results, _) = await repo.SearchAsync("tat", bookKey: "SB", limit: 50, offset: 50, sortOrder: "canonical");
         Assert(page2Results.Count == 50, "Paging to offset 50 returns next 50 items", page2Results.Count.ToString());
         Assert(page2Results.First().Sequence > tatResults.Last().Sequence, "Page 2 strictly continues canonical sequence from Page 1");
+    }
+
+    private static async Task TestBtgSvaTmgAndBookFiltersAsync(string dbPath)
+    {
+        var repo = new SqliteCorpusRepository(dbPath);
+        var refService = new DirectReferenceService(repo);
+
+        var registry = new BookRegistry();
+
+        // 1. BookRegistry descriptors
+        var btgDesc = registry.GetBook("BTG");
+        Assert(btgDesc != null && btgDesc.Abbreviation == "BTG", "BookRegistry contains BTG descriptor");
+        Assert(btgDesc != null && btgDesc.Category == "Essays & Articles", "BTG Category is Essays & Articles");
+
+        var svaDesc = registry.GetBook("SVA");
+        Assert(svaDesc != null && svaDesc.Abbreviation == "SVA", "BookRegistry contains SVA descriptor");
+        Assert(svaDesc != null && svaDesc.Category == "Other Works", "SVA Category is Other Works");
+
+        var tmgDesc = registry.GetBook("TMG");
+        Assert(tmgDesc != null && tmgDesc.Abbreviation == "TMG", "BookRegistry contains TMG descriptor");
+        Assert(tmgDesc != null && tmgDesc.Category == "Other Works", "TMG Category is Other Works");
+
+        // 2. Sample records retrieval
+        var btg1 = await repo.GetRecordAsync("BTG-1");
+        Assert(btg1 != null && btg1.Reference == "BTG 1", "BTG-1 record retrieved", btg1?.Reference);
+        Assert(btg1 != null && btg1.Title != null && btg1.Title.Contains("Message of His Divine Grace"), "BTG-1 title contains 'Message of His Divine Grace'");
+        Assert(btg1 != null && !string.IsNullOrWhiteSpace(btg1.Translation), "BTG-1 contains full article text in Translation/Purport");
+
+        var sva20 = await repo.GetRecordAsync("SVA-1.20");
+        Assert(sva20 != null && sva20.Reference == "SVA 1.20", "SVA-1.20 record retrieved", sva20?.Reference);
+        Assert(sva20 != null && sva20.Title != null && sva20.Title.Contains("Pañca-tattva Mahā-mantra"), "SVA-1.20 is Pañca-tattva Mahā-mantra", sva20?.Title);
+
+        var sva23 = await repo.GetRecordAsync("SVA-1.23");
+        Assert(sva23 != null && sva23.Reference == "SVA 1.23", "SVA-1.23 record retrieved", sva23?.Reference);
+        Assert(sva23 != null && sva23.Title != null && sva23.Title.Contains("Gurv"), "SVA-1.23 is Śrī Śrī Gurv-aṣṭaka", sva23?.Title);
+        Assert(sva23 != null && sva23.Purports != null && sva23.Purports.Contains("saṁsāra-dāvānala"), "SVA-1.23 contains authentic song text ('saṁsāra-dāvānala')");
+
+        var tmg1 = await repo.GetRecordAsync("TMG-1");
+        Assert(tmg1 != null && tmg1.Reference == "TMG 1", "TMG-1 record retrieved", tmg1?.Reference);
+        Assert(tmg1 != null && tmg1.Title != null && tmg1.Title.Contains("Tilaka"), "TMG-1 title contains 'Tilaka'", tmg1?.Title);
+
+        var tmg6 = await repo.GetRecordAsync("TMG-6");
+        Assert(tmg6 != null && tmg6.Reference == "TMG 6", "TMG-6 record retrieved", tmg6?.Reference);
+
+        // 3. Direct Reference resolution
+        var btgRef = await refService.TryResolveExactAsync("btg 1");
+        Assert(btgRef == "BTG-1", "Resolves 'btg 1' -> 'BTG-1'", btgRef);
+
+        var svaRef = await refService.TryResolveExactAsync("sva 1.20");
+        Assert(svaRef == "SVA-1.20", "Resolves 'sva 1.20' -> 'SVA-1.20'", svaRef);
+
+        var tmgRef = await refService.TryResolveExactAsync("tmg 1");
+        Assert(tmgRef == "TMG-1", "Resolves 'tmg 1' -> 'TMG-1'", tmgRef);
+
+        // 4. Breadcrumb formatting
+        var btgBc = repo.GetBreadcrumb("BTG", "BTG 1");
+        Assert(btgBc.Contains("Back to Godhead") && btgBc.Contains("Article 1"), "BTG 1 breadcrumb formatted correctly", btgBc);
+
+        var svaBc = repo.GetBreadcrumb("SVA", "SVA 1.20");
+        Assert(svaBc.Contains("Songs of the Vaiṣṇava Ācāryas") && svaBc.Contains("Standard Prayers"), "SVA 1.20 breadcrumb formatted correctly", svaBc);
+
+        var tmgBc = repo.GetBreadcrumb("TMG", "TMG 1");
+        Assert(tmgBc.Contains("Temple Mantra Guide") && tmgBc.Contains("Mantra 1"), "TMG 1 breadcrumb formatted correctly", tmgBc);
+
+        // 5. Full-text search in new books
+        var (btgHits, _) = await repo.SearchAsync("Godhead", bookKey: "BTG");
+        Assert(btgHits.Count > 0, "FTS search in BTG for 'Godhead' returns hits", btgHits.Count.ToString());
+
+        var (svaHits, _) = await repo.SearchAsync("samsara", bookKey: "SVA");
+        Assert(svaHits.Count > 0, "FTS search in SVA for 'samsara' returns hits", svaHits.Count.ToString());
+
+        var (tmgHits, _) = await repo.SearchAsync("tilaka", bookKey: "TMG");
+        Assert(tmgHits.Count > 0, "FTS search in TMG for 'tilaka' returns hits", tmgHits.Count.ToString());
+
+        // 6. Multi-Book search across the 3 new works
+        var (multiHits, _) = await repo.SearchAsync("prabhupada", bookKeys: new[] { "BTG", "SVA", "TMG" });
+        Assert(multiHits.Count > 0, "Multi-book search across BTG, SVA, TMG returns hits", multiHits.Count.ToString());
+        bool onlyNewBooks = multiHits.All(r => r.RecordKey.StartsWith("BTG") || r.RecordKey.StartsWith("SVA") || r.RecordKey.StartsWith("TMG"));
+        Assert(onlyNewBooks, "All multi-book hits strictly belong to checked books BTG, SVA, TMG");
+
+        // 7. Alphabetical Ascending (A–Z) sorting of library books
+        var hierarchy = await repo.GetLibraryHierarchyAsync();
+        var sortedTitles = hierarchy
+            .Where(b => !string.IsNullOrEmpty(b.Title))
+            .OrderBy(b => b.Title, StringComparer.CurrentCultureIgnoreCase)
+            .Select(b => b.Title)
+            .ToList();
+
+        bool isSortedAZ = true;
+        for (int i = 0; i < sortedTitles.Count - 1; i++)
+        {
+            if (string.Compare(sortedTitles[i], sortedTitles[i + 1], StringComparison.CurrentCultureIgnoreCase) > 0)
+            {
+                isSortedAZ = false;
+                break;
+            }
+        }
+        Assert(isSortedAZ, "Books in search filters can be ordered in strictly ascending alphabetical order (A–Z)");
     }
 }

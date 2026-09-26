@@ -63,6 +63,9 @@ namespace VedaBaseModern.Core.Registry
             new BookDescriptor { BookKey = "ROP", Title = "Reservoir of Pleasure", Author = ProbhupadaAuthor, Abbreviation = "RoP", Category = "Books", CanonicalOrder = 44 },
             new BookDescriptor { BookKey = "GG", Title = "Gītār Gāna", Author = ProbhupadaAuthor, Abbreviation = "GG", Category = "Scripture", CanonicalOrder = 45 },
             new BookDescriptor { BookKey = "SPL", Title = "Śrīla Prabhupāda-līlāmṛta", Author = "Satsvarūpa dāsa Goswami", Abbreviation = "SPL", Category = "Biographies", CanonicalOrder = 46 },
+            new BookDescriptor { BookKey = "BTG", Title = "Back to Godhead (1944–1960)", Author = ProbhupadaAuthor, Abbreviation = "BTG", Category = "Essays & Articles", CanonicalOrder = 47 },
+            new BookDescriptor { BookKey = "SVA", Title = "Songs of the Vaiṣṇava Ācāryas", Author = "Vaiṣṇava Ācāryas", Abbreviation = "SVA", Category = "Other Works", CanonicalOrder = 48 },
+            new BookDescriptor { BookKey = "TMG", Title = "Temple Mantra Guide", Author = ProbhupadaAuthor, Abbreviation = "TMG", Category = "Other Works", CanonicalOrder = 49 },
             new BookDescriptor { BookKey = "UNKNOWN", Title = "Life Comes From Life", Author = ProbhupadaAuthor, Abbreviation = "LCFL", Category = "Conversations", CanonicalOrder = 28 }
         };
 

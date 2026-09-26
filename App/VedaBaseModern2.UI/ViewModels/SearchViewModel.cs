@@ -45,6 +45,18 @@ namespace VedaBaseModern.UI.ViewModels
         private BookNode? _selectedBookFilter;
 
         [ObservableProperty]
+        private string _selectedBooksSummary = "All Books (A–Z)";
+
+        [ObservableProperty]
+        private string _selectedBooksCountText = "All selected";
+
+        [ObservableProperty]
+        private string _bookFilterSearchText = string.Empty;
+
+        public ObservableCollection<BookFilterItem> FilterableBooks { get; } = new();
+        public ObservableCollection<BookFilterItem> FilteredBookItems { get; } = new();
+
+        [ObservableProperty]
         private int _selectedFacetIndex = 0; // 0 = All, 1 = Scripture, 2 = Notes, 3 = Bookmarks, 4 = Highlights
 
         [ObservableProperty]
@@ -70,7 +82,19 @@ namespace VedaBaseModern.UI.ViewModels
 
         private int _totalScriptureCount;
 
-        public List<string>? CheckedBookKeys { get; set; }
+        private List<string>? _checkedBookKeys;
+        public List<string>? CheckedBookKeys
+        {
+            get => _checkedBookKeys;
+            set
+            {
+                _checkedBookKeys = value;
+                if (FilterableBooks.Count > 0)
+                {
+                    SyncCheckboxesFromKeys();
+                }
+            }
+        }
 
         public ObservableCollection<SearchResult> Results { get; } = new();
         public ObservableCollection<BookNode> AvailableBooks { get; } = new();
@@ -169,18 +193,141 @@ namespace VedaBaseModern.UI.ViewModels
 
         private async void InitializeBooksAsync()
         {
-            AvailableBooks.Add(new BookNode { Title = "All Books", BookKey = "" });
-            AvailableBooks.Add(new BookNode { Title = "Sri Caitanya-caritamrta (All)", BookKey = "CC" });
-            SelectedBookFilter = AvailableBooks[0];
-
             try
             {
                 var books = await _repository.GetLibraryHierarchyAsync();
-                foreach (var b in books) AvailableBooks.Add(b);
+
+                // Sort books ascending A–Z by Title
+                var sortedBooks = books
+                    .Where(b => !string.IsNullOrEmpty(b.Title))
+                    .OrderBy(b => b.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+
+                AvailableBooks.Clear();
+                AvailableBooks.Add(new BookNode { Title = "All Books (A–Z)", BookKey = "" });
+
+                FilterableBooks.Clear();
+                FilteredBookItems.Clear();
+
+                foreach (var b in sortedBooks)
+                {
+                    AvailableBooks.Add(b);
+
+                    var filterItem = new BookFilterItem
+                    {
+                        BookKey = b.BookKey,
+                        Title = b.Title,
+                        IsSelected = true
+                    };
+                    FilterableBooks.Add(filterItem);
+                    FilteredBookItems.Add(filterItem);
+                }
+
+                SelectedBookFilter = AvailableBooks[0];
+                SelectedBooksSummary = "All Books (A–Z)";
+                SelectedBooksCountText = "All selected";
+
+                if (CheckedBookKeys != null && CheckedBookKeys.Count > 0)
+                {
+                    SyncCheckboxesFromKeys();
+                }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[Search] Failed to load the book filter list: {ex}");
+            }
+        }
+
+        public void UpdateFilteredBookItems(string searchFilter)
+        {
+            FilteredBookItems.Clear();
+            var filter = (searchFilter ?? "").Trim();
+            foreach (var item in FilterableBooks)
+            {
+                if (string.IsNullOrEmpty(filter) ||
+                    item.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase) ||
+                    item.BookKey.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                {
+                    FilteredBookItems.Add(item);
+                }
+            }
+        }
+
+        public void SelectAllBooks(bool selectAll)
+        {
+            foreach (var item in FilterableBooks)
+            {
+                item.IsSelected = selectAll;
+            }
+            UpdateSelectedBooksFromCheckboxes();
+        }
+
+        public void UpdateSelectedBooksFromCheckboxes()
+        {
+            var selected = FilterableBooks.Where(b => b.IsSelected).ToList();
+            if (selected.Count == 0 || selected.Count == FilterableBooks.Count)
+            {
+                CheckedBookKeys = null;
+                SelectedBooksSummary = "All Books (A–Z)";
+                SelectedBooksCountText = "All selected";
+            }
+            else if (selected.Count == 1)
+            {
+                CheckedBookKeys = new List<string> { selected[0].BookKey };
+                SelectedBooksSummary = selected[0].Title;
+                SelectedBooksCountText = "1 selected";
+            }
+            else
+            {
+                CheckedBookKeys = selected.Select(b => b.BookKey).ToList();
+                SelectedBooksSummary = $"{selected.Count} Books Selected";
+                SelectedBooksCountText = $"{selected.Count} of {FilterableBooks.Count} selected";
+            }
+        }
+
+        public void SyncCheckboxesFromKeys()
+        {
+            if (_checkedBookKeys == null || _checkedBookKeys.Count == 0)
+            {
+                foreach (var b in FilterableBooks) b.IsSelected = true;
+                SelectedBooksSummary = "All Books (A–Z)";
+                SelectedBooksCountText = "All selected";
+                return;
+            }
+
+            var keySet = new HashSet<string>(_checkedBookKeys, StringComparer.OrdinalIgnoreCase);
+            int count = 0;
+            string lastTitle = "";
+
+            foreach (var b in FilterableBooks)
+            {
+                bool match = keySet.Contains(b.BookKey);
+                if (!match && keySet.Contains("CC") && (b.BookKey == "DI" || b.BookKey == "MADHYA" || b.BookKey == "ANTYA"))
+                {
+                    match = true;
+                }
+                b.IsSelected = match;
+                if (match)
+                {
+                    count++;
+                    lastTitle = b.Title;
+                }
+            }
+
+            if (count == 0 || count == FilterableBooks.Count)
+            {
+                SelectedBooksSummary = "All Books (A–Z)";
+                SelectedBooksCountText = "All selected";
+            }
+            else if (count == 1)
+            {
+                SelectedBooksSummary = lastTitle;
+                SelectedBooksCountText = "1 selected";
+            }
+            else
+            {
+                SelectedBooksSummary = $"{count} Books Selected";
+                SelectedBooksCountText = $"{count} of {FilterableBooks.Count} selected";
             }
         }
 
@@ -268,7 +415,9 @@ namespace VedaBaseModern.UI.ViewModels
             try
             {
                 var query = SearchText.Trim();
-                string? filterKey = string.IsNullOrEmpty(SelectedBookFilter?.BookKey) ? null : SelectedBookFilter.BookKey;
+                string? filterKey = (CheckedBookKeys != null && CheckedBookKeys.Count > 0)
+                    ? null
+                    : (string.IsNullOrEmpty(SelectedBookFilter?.BookKey) ? null : SelectedBookFilter.BookKey);
 
                 string? scope = SelectedFieldScope switch
                 {
@@ -331,7 +480,9 @@ namespace VedaBaseModern.UI.ViewModels
             try
             {
                 var query = SearchText.Trim();
-                string? filterKey = string.IsNullOrEmpty(SelectedBookFilter?.BookKey) ? null : SelectedBookFilter.BookKey;
+                string? filterKey = (CheckedBookKeys != null && CheckedBookKeys.Count > 0)
+                    ? null
+                    : (string.IsNullOrEmpty(SelectedBookFilter?.BookKey) ? null : SelectedBookFilter.BookKey);
 
                 string? scope = SelectedFieldScope switch
                 {
@@ -390,5 +541,14 @@ namespace VedaBaseModern.UI.ViewModels
                 IsLoading = false;
             }
         }
+    }
+
+    public partial class BookFilterItem : ObservableObject
+    {
+        public string BookKey { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+
+        [ObservableProperty]
+        private bool _isSelected = true;
     }
 }

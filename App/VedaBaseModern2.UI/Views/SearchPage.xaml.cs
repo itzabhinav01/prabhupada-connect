@@ -108,9 +108,33 @@ namespace VedaBaseModern.UI.Views
             }
         }
 
-        private async void ComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void BookFilterSearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            // Only search if there is text
+            if (sender is TextBox tb)
+            {
+                ViewModel.UpdateFilteredBookItems(tb.Text);
+            }
+        }
+
+        private void SelectAllBooks_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.SelectAllBooks(true);
+        }
+
+        private void ClearAllBooks_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.SelectAllBooks(false);
+        }
+
+        private void BookCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.UpdateSelectedBooksFromCheckboxes();
+        }
+
+        private async void ApplyBookFilter_Click(object sender, RoutedEventArgs e)
+        {
+            BookFilterFlyout.Hide();
+            ViewModel.UpdateSelectedBooksFromCheckboxes();
             if (!string.IsNullOrWhiteSpace(ViewModel.SearchText))
             {
                 await ViewModel.ExecuteSearchCommand.ExecuteAsync(null);

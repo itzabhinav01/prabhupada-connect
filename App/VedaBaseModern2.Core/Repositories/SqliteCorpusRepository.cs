@@ -70,6 +70,9 @@ namespace VedaBaseModern.Core.Repositories
             { "ROP", "Reservoir of Pleasure" },
             { "GG", "Gītār Gāna" },
             { "SPL", "Śrīla Prabhupāda-līlāmṛta" },
+            { "BTG", "Back to Godhead (1944–1960)" },
+            { "SVA", "Songs of the Vaiṣṇava Ācāryas" },
+            { "TMG", "Temple Mantra Guide" },
             { "UNKNOWN", "Life Comes From Life" }
         };
 
@@ -83,7 +86,7 @@ namespace VedaBaseModern.Core.Repositories
             "TLK", "TQK", "BS", "MM", "NBS", "BB", "SPS", "DS", "BBD", "POY", "RV",
             "EKC", "KCTYS", "MOG", "LOB", "PQPA", "SSR", "JSD", "LCFL", "CB", "CAT",
             "OWK", "SFL", "TT", "EJ", "SC", "DWT", "POP", "QFE",
-            "RTW", "LON", "MG", "ROP", "GG", "SPL", "UNKNOWN"
+            "RTW", "LON", "MG", "ROP", "GG", "SPL", "BTG", "SVA", "TMG", "UNKNOWN"
         };
 
         // CANONICAL EDITION FILTER (Phase 2H finding): 21,406 of the corpus's
@@ -463,6 +466,27 @@ namespace VedaBaseModern.Core.Repositories
                 }
                 return "Verses";
             }
+            else if (bookKey == "SVA")
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^SVA\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    int sec = int.Parse(match.Groups[1].Value);
+                    return sec switch
+                    {
+                        1 => "1: Standard Prayers",
+                        2 => "2: Songs of Śrīla Bhaktivinoda Ṭhākura",
+                        3 => "3: Songs of Śrīla Narottama dāsa Ṭhākura",
+                        4 => "4: Songs of Other Vaiṣṇava Ācāryas",
+                        _ => $"Section {sec}"
+                    };
+                }
+                return "Foreword & Introduction";
+            }
+            else if (bookKey == "TMG")
+            {
+                return "Temple Mantras";
+            }
 
             // Prose/anthology books (KB, NOD, TLC, BBD, CAT, DS, DWT, EJ, EKC,
             // GG, JSD, KCTYS, LOB, LON, MG, MOG, NBS, OWK, POP, POY, PQPA, QFE,
@@ -616,6 +640,38 @@ namespace VedaBaseModern.Core.Repositories
                         return $"{bookTitle} › Section {secNum}: {secName} › SPS {secNum}.{match.Groups[2].Value}";
                     }
                     return $"{bookTitle} › Section {secNum}: {secName}";
+                }
+            }
+            else if (bookKey == "SVA")
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^SVA\s+(\d+)\.(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out int secNum))
+                {
+                    string secName = secNum switch
+                    {
+                        1 => "1: Standard Prayers",
+                        2 => "2: Songs of Śrīla Bhaktivinoda Ṭhākura",
+                        3 => "3: Songs of Śrīla Narottama dāsa Ṭhākura",
+                        4 => "4: Songs of Other Vaiṣṇava Ācāryas",
+                        _ => $"Section {secNum}"
+                    };
+                    return $"{bookTitle} › {secName} › Song {match.Groups[2].Value}";
+                }
+            }
+            else if (bookKey == "TMG")
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^TMG\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    return $"{bookTitle} › Mantra {match.Groups[1].Value}";
+                }
+            }
+            else if (bookKey == "BTG")
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^BTG\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    return $"{bookTitle} › Article {match.Groups[1].Value}";
                 }
             }
 

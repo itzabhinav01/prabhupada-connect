@@ -8,6 +8,7 @@
     xmlns:services="using:VedaBaseModern.Core.Services"
     xmlns:helpers="using:VedaBaseModern.UI.Helpers"
     xmlns:converters="using:VedaBaseModern.UI.Converters"
+    xmlns:viewModels="using:VedaBaseModern.UI.ViewModels"
     mc:Ignorable="d"
     KeyboardAcceleratorPlacementMode="Hidden"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -34,7 +35,7 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="190" />
+                    <ColumnDefinition Width="210" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <!-- Type '@' for direct-reference mode (e.g. "@BG 1.1", "@SB 1.4.6")
@@ -62,12 +63,85 @@
                         </DataTemplate>
                     </AutoSuggestBox.ItemTemplate>
                 </AutoSuggestBox>
-                <ComboBox Grid.Column="1" ItemsSource="{x:Bind ViewModel.AvailableBooks, Mode=OneWay}"
-                          SelectedItem="{x:Bind ViewModel.SelectedBookFilter, Mode=TwoWay}"
-                          SelectionChanged="ComboBox_SelectionChanged"
-                          DisplayMemberPath="Title"
-                          HorizontalAlignment="Stretch" Height="40"
-                          AutomationProperties.Name="Filter by book" ToolTipService.ToolTip="Filter by book" />
+                <DropDownButton x:Name="BookFilterDropDownButton" Grid.Column="1"
+                                HorizontalAlignment="Stretch" Height="40"
+                                AutomationProperties.Name="Filter by books (Multi-Select, A–Z)"
+                                ToolTipService.ToolTip="Filter by books (Multi-Select, A–Z)">
+                    <DropDownButton.Content>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0" Glyph="&#xE71D;" FontSize="13" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SelectedBooksSummary, Mode=OneWay}" 
+                                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                       FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                        </Grid>
+                    </DropDownButton.Content>
+                    <DropDownButton.Flyout>
+                        <Flyout x:Name="BookFilterFlyout" Placement="BottomEdgeAlignedRight">
+                            <Grid Width="340" MaxHeight="450" RowSpacing="10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <!-- Flyout Header -->
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Filter by Books (A–Z)" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SelectedBooksCountText, Mode=OneWay}" 
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <!-- Quick Search inside Books -->
+                                <TextBox Grid.Row="1" x:Name="BookFilterSearchBox"
+                                         PlaceholderText="Filter books list..."
+                                         TextChanged="BookFilterSearchBox_TextChanged"
+                                         Height="32" FontSize="12" />
+
+                                <!-- Select All / Clear All buttons -->
+                                <Grid Grid.Row="2" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="Select All" HorizontalAlignment="Stretch" 
+                                            Click="SelectAllBooks_Click" Height="30" FontSize="12" />
+                                    <Button Grid.Column="1" Content="Clear All" HorizontalAlignment="Stretch" 
+                                            Click="ClearAllBooks_Click" Height="30" FontSize="12" />
+                                </Grid>
+
+                                <!-- Book List with Checkboxes (A-Z) -->
+                                <ListView Grid.Row="3" x:Name="BookFilterListView"
+                                          ItemsSource="{x:Bind ViewModel.FilteredBookItems, Mode=OneWay}"
+                                          SelectionMode="None"
+                                          MaxHeight="260"
+                                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:BookFilterItem">
+                                            <CheckBox Content="{x:Bind Title}" 
+                                                      IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                                      Click="BookCheckBox_Click"
+                                                      Margin="0,1" HorizontalAlignment="Stretch" FontSize="13" />
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+
+                                <!-- Apply Button -->
+                                <Button Grid.Row="4" Content="Apply Filter" Style="{StaticResource AccentButtonStyle}"
+                                        HorizontalAlignment="Stretch" Height="34" Click="ApplyBookFilter_Click" />
+                            </Grid>
+                        </Flyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
                 <Button Grid.Column="2" x:Name="AdvancedSearchBtn" Click="AdvancedSearchBtn_Click"
                         Style="{StaticResource AccentButtonStyle}" Height="40" Padding="12,0" Margin="10,0,0,0"
                         ToolTipService.ToolTip="Folio Advanced Query, Word Wheel &amp; Checked Branches (Ctrl+Shift+S)">
