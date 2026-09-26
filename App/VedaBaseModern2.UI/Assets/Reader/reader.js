@@ -1735,6 +1735,22 @@
             root.style.setProperty('--bg-color', theme.backgroundColor);
             document.body.style.backgroundColor = theme.backgroundColor;
             root.style.backgroundColor = theme.backgroundColor;
+
+            // Compute luminance of background to set optimal Sanskrit verse yellow color
+            const hex = theme.backgroundColor.replace('#', '');
+            if (hex.length >= 6) {
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+                const lum = (0.299 * r + 0.587 * g + 0.114 * b);
+                if (lum > 140) {
+                    // Light theme: rich deep amber saffron for high contrast on white/light
+                    root.style.setProperty('--color-sanskrit-verse', '#945B00');
+                } else {
+                    // Dark/Green theme: luminous warm golden yellow
+                    root.style.setProperty('--color-sanskrit-verse', '#F5C542');
+                }
+            }
         }
         if (theme.primaryTextColor) {
             root.style.setProperty('--text-primary', theme.primaryTextColor);

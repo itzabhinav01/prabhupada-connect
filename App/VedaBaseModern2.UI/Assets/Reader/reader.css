@@ -5,6 +5,7 @@
     --text-tertiary: #757575;
     --accent-color: #E5A93C;
     --accent-hover: #F5B041;
+    --color-sanskrit-verse: #F5C542; /* Luminous warm golden yellow for distinct sacred Sanskrit/Bengali chanting text */
     --card-bg: #1E1E1E;
     --card-border: rgba(255, 255, 255, 0.08);
     --selection-bg: rgba(229, 169, 60, 0.35);
@@ -1918,13 +1919,17 @@ body.theme-light #hit-navigation-hud {
     text-align: center;
     font-style: italic;
     font-size: var(--font-size-translit);
+    font-weight: 500;
     line-height: 1.85;
-    margin-bottom: 14px;
-    color: var(--text-primary);
+    margin-bottom: 16px;
+    color: var(--color-sanskrit-verse, #F5C542);
+    letter-spacing: 0.015em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .song-verse-line {
-    margin-bottom: 4px;
+    margin-bottom: 5px;
+    color: var(--color-sanskrit-verse, #F5C542);
 }
 
 .song-section-label {
