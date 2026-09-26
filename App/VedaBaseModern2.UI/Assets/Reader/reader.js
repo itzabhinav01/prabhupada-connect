@@ -1230,11 +1230,29 @@
         const hlMap = groupHighlightsByField(highlights, record.RecordKey);
         const isProseRecord = record.BookKey === 'SPL' || (!record.Devanagari && !record.Transliteration && !record.Synonyms && (!record.Translation || record.BookKey === 'SPL'));
         const displayTitle = record.Title || record.Reference || record.RecordKey;
+        const hasDistinctCitation = Boolean(
+            !isProseRecord &&
+            record.Title &&
+            record.Title.trim() &&
+            record.Title.trim().toLowerCase() !== (record.Reference || '').trim().toLowerCase() &&
+            record.Title.trim().toLowerCase() !== record.RecordKey.toLowerCase()
+        );
 
         let html = `
         <article class="verse-card single-verse ${isProseRecord ? 'prose-chapter-card' : ''}" id="verse-${escapeHtml(record.RecordKey)}" data-record-key="${escapeHtml(record.RecordKey)}">
             <header class="${isProseRecord ? 'chapter-header-card' : 'verse-header'}">
-                <h1 class="${isProseRecord ? 'chapter-title' : 'verse-reference'}">${escapeHtml(isProseRecord ? displayTitle : (record.Reference || record.RecordKey))}</h1>
+                <div class="verse-header-content">
+                    <h1 class="${isProseRecord ? 'chapter-title' : 'verse-reference'}">${escapeHtml(isProseRecord ? displayTitle : (record.Reference || record.RecordKey))}</h1>
+                    ${hasDistinctCitation ? `
+                    <div class="verse-citation-badge-container">
+                        <button class="verse-citation-pill" onclick="reader.onNavigateScripture(event, '${escapeHtml(record.Title)}')" title="Navigate or search scripture: ${escapeHtml(record.Title)}">
+                            <span class="citation-icon">📖</span>
+                            <span class="citation-source-label">Source Scripture:</span>
+                            <strong class="citation-title">${escapeHtml(record.Title)}</strong>
+                            <span class="citation-arrow">↗</span>
+                        </button>
+                    </div>` : ''}
+                </div>
             </header>
         `;
 
@@ -1316,6 +1334,13 @@
             const isProseRecord = record.BookKey === 'SPL' || (!record.Devanagari && !record.Transliteration && !record.Synonyms && (!record.Translation || record.BookKey === 'SPL'));
             const displayTitle = isProseRecord ? (record.Title || record.Reference || record.RecordKey) : (record.Reference || record.RecordKey);
             const isSingleProseRecord = isProseRecord && records.length === 1;
+            const hasDistinctCitation = Boolean(
+                !isProseRecord &&
+                record.Title &&
+                record.Title.trim() &&
+                record.Title.trim().toLowerCase() !== (record.Reference || '').trim().toLowerCase() &&
+                record.Title.trim().toLowerCase() !== record.RecordKey.toLowerCase()
+            );
 
             html += `
             <article class="verse-card ${isProseRecord ? 'prose-chapter-card' : ''}" id="verse-${escapeHtml(record.RecordKey)}" data-record-key="${escapeHtml(record.RecordKey)}">
@@ -1324,7 +1349,18 @@
             if (!isSingleProseRecord) {
                 html += `
                 <header class="${isProseRecord ? 'chapter-header-card' : 'verse-header'}">
-                    <h2 class="${isProseRecord ? 'chapter-title' : 'verse-reference'}">${escapeHtml(displayTitle)}</h2>
+                    <div class="verse-header-content">
+                        <h2 class="${isProseRecord ? 'chapter-title' : 'verse-reference'}">${escapeHtml(displayTitle)}</h2>
+                        ${hasDistinctCitation ? `
+                        <div class="verse-citation-badge-container">
+                            <button class="verse-citation-pill" onclick="reader.onNavigateScripture(event, '${escapeHtml(record.Title)}')" title="Navigate or search scripture: ${escapeHtml(record.Title)}">
+                                <span class="citation-icon">📖</span>
+                                <span class="citation-source-label">Source Scripture:</span>
+                                <strong class="citation-title">${escapeHtml(record.Title)}</strong>
+                                <span class="citation-arrow">↗</span>
+                            </button>
+                        </div>` : ''}
+                    </div>
                     <button class="btn-focus-verse" onclick="reader.onFocusVerse('${escapeHtml(record.RecordKey)}')">Focus Verse</button>
                 </header>
                 `;

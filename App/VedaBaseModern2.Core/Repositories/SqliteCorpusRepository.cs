@@ -605,9 +605,48 @@ namespace VedaBaseModern.Core.Repositories
                 var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^Bs\s+(\d+)\.(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (match.Success) return $"{bookTitle} › Chapter {match.Groups[1].Value} › Verse {match.Groups[2].Value}";
             }
+            else if (bookKey == "SPS")
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^(?:SPS\s+)?(?:Section\s+)?(\d+)(?:\.(\d+))?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out int secNum))
+                {
+                    string secName = SpsSectionNames.TryGetValue(secNum, out var name) ? name : $"Section {secNum}";
+                    if (match.Groups[2].Success)
+                    {
+                        return $"{bookTitle} › Section {secNum}: {secName} › SPS {secNum}.{match.Groups[2].Value}";
+                    }
+                    return $"{bookTitle} › Section {secNum}: {secName}";
+                }
+            }
 
             return $"{bookTitle} › {firstRef}";
         }
+
+        private static readonly Dictionary<int, string> SpsSectionNames = new()
+        {
+            { 1, "Auspicious Invocation Mantras" },
+            { 2, "Śrī Śrī Gurv-aṣṭaka" },
+            { 3, "Śrī Śrī Ṣaḍ-gosvāmy-aṣṭaka" },
+            { 4, "Śrī Śrī Śikṣāṣṭaka" },
+            { 5, "Bhagavad-gītā" },
+            { 6, "Śrīmad-Bhāgavatam" },
+            { 7, "Caitanya-caritāmṛta" },
+            { 8, "Śrī Brahma-saṁhitā" },
+            { 9, "Vedānta-sūtra" },
+            { 10, "The Upaniṣads" },
+            { 11, "Caitanya Bhāgavata" },
+            { 12, "Six Gosvāmīs & Others" },
+            { 13, "Purāṇas" },
+            { 14, "Mahābhārata" },
+            { 15, "Other Vedic Literatures" },
+            { 16, "Previous Ācāryas" },
+            { 17, "Bhaktivinoda Ṭhākura" },
+            { 18, "Narottama dāsa Ṭhākura" },
+            { 19, "Jayadeva Gosvāmī" },
+            { 20, "Nīti-śāstra" },
+            { 21, "Non Devotees" },
+            { 22, "Quotes from Other Sources" }
+        };
 
         public async Task<List<CorpusRecord>> GetRecordsAsync(IEnumerable<string> recordKeys)
         {

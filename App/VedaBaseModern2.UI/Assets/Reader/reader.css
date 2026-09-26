@@ -129,6 +129,75 @@ html, body {
     letter-spacing: 0.02em;
 }
 
+/* Authentic Scripture Citation Badge (for Prabhupāda Ślokas & Antology records) */
+.verse-header-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.single-verse .verse-header-content {
+    align-items: center;
+    text-align: center;
+}
+
+.verse-citation-badge-container {
+    display: inline-flex;
+    margin-top: 4px;
+}
+
+.verse-citation-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(229, 169, 60, 0.12);
+    border: 1px solid var(--accent-color);
+    border-radius: 999px;
+    padding: 4px 14px;
+    color: var(--accent-color);
+    font-family: var(--font-family-serif);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.verse-citation-pill:hover {
+    background: var(--accent-color);
+    color: #121212;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(229, 169, 60, 0.35);
+}
+
+.verse-citation-pill .citation-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.verse-citation-pill .citation-source-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+    font-weight: 600;
+}
+
+.verse-citation-pill .citation-title {
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.verse-citation-pill .citation-arrow {
+    font-size: 11px;
+    opacity: 0.75;
+    transition: transform 0.2s ease;
+}
+
+.verse-citation-pill:hover .citation-arrow {
+    transform: translate(2px, -2px);
+    opacity: 1;
+}
+
 .btn-focus-verse {
     background: transparent;
     border: 1px solid var(--card-border);

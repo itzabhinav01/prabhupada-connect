@@ -369,6 +369,8 @@ Further check [[CC Adi 1.1]] for invocations.";
         Assert(jsContent.Contains("toggleChantingPulse"), "reader.js contains toggleChantingPulse audio synthesizer");
         Assert(cssContent.Contains(".meter-badge"), "reader.css contains .meter-badge styling");
         Assert(cssContent.Contains(".chanting-guide-drawer"), "reader.css contains .chanting-guide-drawer styling");
+        Assert(cssContent.Contains(".verse-citation-pill"), "reader.css contains .verse-citation-pill styling");
+        Assert(jsContent.Contains("verse-citation-pill"), "reader.js contains verse-citation-pill markup generator");
     }
 
     private static async Task TestScriptureRepairIntegrityAsync(string corpusDb)
@@ -568,6 +570,16 @@ Further check [[CC Adi 1.1]] for invocations.";
 
         var spsRef10 = await refService.TryResolveExactAsync("sps 10.32");
         Assert(spsRef10 == "SPS-10.32", "Resolves 'sps 10.32' -> 'SPS-10.32'", spsRef10);
+
+        // Breadcrumb formatting for SPS sections
+        var spsBreadcrumb5 = repo.GetBreadcrumb("SPS", "SPS 5.5");
+        Assert(spsBreadcrumb5 == "Śrīla Prabhupāda Ślokas › Section 5: Bhagavad-gītā › SPS 5.5", "SPS 5.5 breadcrumb includes Section 5: Bhagavad-gītā", spsBreadcrumb5);
+
+        var spsBreadcrumb10 = repo.GetBreadcrumb("SPS", "SPS 10.7");
+        Assert(spsBreadcrumb10 == "Śrīla Prabhupāda Ślokas › Section 10: The Upaniṣads › SPS 10.7", "SPS 10.7 breadcrumb includes Section 10: The Upaniṣads", spsBreadcrumb10);
+
+        var bg21Key = await refService.TryResolveExactAsync("Bhagavad-gītā 2.1");
+        Assert(bg21Key == "BG-2-1", "Resolves citation 'Bhagavad-gītā 2.1' -> 'BG-2-1'", bg21Key);
 
         // 6. Pure Canonical Sequence Search: searching 'tat' in SB follows strictly increasing sequence
         var (tatResults, tatCount) = await repo.SearchAsync("tat", bookKey: "SB", limit: 50, sortOrder: "canonical");

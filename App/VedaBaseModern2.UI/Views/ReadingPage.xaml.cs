@@ -401,6 +401,15 @@ namespace VedaBaseModern.UI.Views
                                     UpdateViewModeButton();
                                 }
                             }
+                            else
+                            {
+                                // External scripture citation (e.g. from an SPS verse or outside quotation):
+                                // open a search tab so the reader can explore where Śrīla Prabhupāda explains or quotes it.
+                                if (MainPage.Current != null)
+                                {
+                                    MainPage.Current.CreateNewTab($"Search: {targetRef}", "\uE721", typeof(SearchPage), targetRef);
+                                }
+                            }
                         }
                         break;
 
