@@ -1027,7 +1027,7 @@ namespace VedaBaseModern.Core.Repositories
                         while (reader.Read())
                         {
                             string rk = reader.GetString(0);
-                            string bk = reader.GetString(1);
+                            string bk = reader.IsDBNull(1) ? "" : reader.GetString(1);
                             string refText = reader.IsDBNull(2) ? "" : reader.GetString(2);
                             int seq = reader.GetInt32(3);
                             int exactPriority = reader.IsDBNull(4) ? 4 : reader.GetInt32(4);
@@ -1044,7 +1044,7 @@ namespace VedaBaseModern.Core.Repositories
                                     string.Equals(refText, query.Trim(), StringComparison.OrdinalIgnoreCase) ||
                                     string.Equals(rk, query.Trim(), StringComparison.OrdinalIgnoreCase) ||
                                     (bookKey != null && (bookKey.ToUpperInvariant() + cleanQuery == cr || bookKey.ToUpperInvariant() + cleanQuery == ck)) ||
-                                    (bk != null && (bk.ToUpperInvariant() + cleanQuery == cr || bk.ToUpperInvariant() + cleanQuery == ck)))
+                                    (!string.IsNullOrEmpty(bk) && (bk.ToUpperInvariant() + cleanQuery == cr || bk.ToUpperInvariant() + cleanQuery == ck)))
                                 {
                                     isExact = true;
                                 }
@@ -1053,8 +1053,8 @@ namespace VedaBaseModern.Core.Repositories
                             results.Add(new SearchResult
                             {
                                 RecordKey = rk,
-                                BookKey = bk,
-                                Reference = string.IsNullOrWhiteSpace(refText) ? bk : refText,
+                                BookKey = bk ?? "",
+                                Reference = string.IsNullOrWhiteSpace(refText) ? (bk ?? "") : refText,
                                 BookTitle = title,
                                 Preview = "",
                                 Category = "Scripture",

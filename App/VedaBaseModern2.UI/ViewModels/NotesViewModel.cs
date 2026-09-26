@@ -229,7 +229,7 @@ namespace VedaBaseModern.UI.ViewModels
                         Id = n.Id,
                         RecordKey = n.RecordKey,
                         Title = n.Title,
-                        Content = n.Content,
+                        Content = n.Content ?? "",
                         CreatedUtc = n.CreatedUtc,
                         UpdatedUtc = n.UpdatedUtc,
                         Field = n.Field,

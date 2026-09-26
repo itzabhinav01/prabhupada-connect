@@ -182,7 +182,28 @@ public sealed partial class MainPage : Page
 
         if (ContentTabs.TabItems.Count == 0)
         {
-            CreateNewTab("Bhagavad-gītā", "\uE8A5", typeof(ReadingPage), "BG-1-1");
+            string resumeRecordKey = "BG-1-1";
+            string resumeTitle = "Bhagavad-gītā";
+            try
+            {
+                var recentHistory = await App.Current.UserRepository.GetRecentHistoryAsync(1);
+                if (recentHistory != null && recentHistory.Count > 0 && !string.IsNullOrWhiteSpace(recentHistory[0].RecordKey))
+                {
+                    string lastKey = recentHistory[0].RecordKey;
+                    var rec = await App.Current.Repository.GetRecordAsync(lastKey);
+                    if (rec != null)
+                    {
+                        resumeRecordKey = rec.RecordKey;
+                        resumeTitle = !string.IsNullOrWhiteSpace(rec.Reference) ? rec.Reference : (!string.IsNullOrWhiteSpace(rec.Title) ? rec.Title : rec.RecordKey);
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback to default Bhagavad-gita 1.1
+            }
+
+            CreateNewTab(resumeTitle, "\uE8A5", typeof(ReadingPage), resumeRecordKey);
         }
 
         if (NavView.MenuItemsSource != null && ViewModel.Books.Any())

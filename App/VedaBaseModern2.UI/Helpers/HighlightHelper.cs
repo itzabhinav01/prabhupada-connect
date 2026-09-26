@@ -34,11 +34,16 @@ namespace VedaBaseModern.UI.Helpers
                     if ((part.StartsWith("«") && part.EndsWith("»")) || (part.StartsWith("[") && part.EndsWith("]")))
                     {
                         string matchText = part.Length >= 2 ? part.Substring(1, part.Length - 2) : part;
-                        textBlock.Inlines.Add(new Run
+                        var run = new Run
                         {
                             Text = matchText,
                             FontWeight = FontWeights.Bold
-                        });
+                        };
+                        if (Application.Current?.Resources.TryGetValue("AccentTextFillColorPrimaryBrush", out var brush) == true && brush is Microsoft.UI.Xaml.Media.Brush b)
+                        {
+                            run.Foreground = b;
+                        }
+                        textBlock.Inlines.Add(run);
                     }
                     else if (!string.IsNullOrEmpty(part))
                     {

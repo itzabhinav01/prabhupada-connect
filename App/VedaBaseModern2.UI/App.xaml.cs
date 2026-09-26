@@ -37,11 +37,12 @@ public partial class App : Application
 
     public App()
     {
+        string crashLogPath = Path.Combine(AppContext.BaseDirectory, "crash.txt");
         this.UnhandledException += (sender, args) =>
         {
             try
             {
-                System.IO.File.WriteAllText(@"C:\VedaBaseModern2\crash.txt", $"Xaml Unhandled: {args.Message}\n{args.Exception}\nStackTrace: {args.Exception?.StackTrace}");
+                System.IO.File.WriteAllText(crashLogPath, $"Xaml Unhandled: {args.Message}\n{args.Exception}\nStackTrace: {args.Exception?.StackTrace}");
             }
             catch { }
             args.Handled = true;
@@ -50,7 +51,7 @@ public partial class App : Application
         {
             try
             {
-                System.IO.File.AppendAllText(@"C:\VedaBaseModern2\crash.txt", $"\nDomain Unhandled: {args.ExceptionObject}");
+                System.IO.File.AppendAllText(crashLogPath, $"\nDomain Unhandled: {args.ExceptionObject}");
             }
             catch { }
         };
@@ -58,7 +59,7 @@ public partial class App : Application
         {
             try
             {
-                System.IO.File.AppendAllText(@"C:\VedaBaseModern2\crash.txt", $"\nTask Unhandled: {args.Exception}");
+                System.IO.File.AppendAllText(crashLogPath, $"\nTask Unhandled: {args.Exception}");
             }
             catch { }
         };

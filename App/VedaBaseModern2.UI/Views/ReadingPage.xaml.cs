@@ -22,7 +22,6 @@ namespace VedaBaseModern.UI.Views
         public ReadingViewModel ViewModel { get; }
 
         private bool _isWebReady;
-        private bool _hasPendingSync;
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _findDebounceTimer;
         private int _findTotalMatches;
         private int _findActiveMatchIndex = -1;
@@ -612,10 +611,8 @@ namespace VedaBaseModern.UI.Views
             LogDebug($"SyncContentToWeb called: _isWebReady={_isWebReady}, CoreWebView2!=null={ReaderWebView?.CoreWebView2 != null}, CurrentRecord={ViewModel.CurrentRecord?.RecordKey}, IsContinuous={ViewModel.IsContinuousChapter}");
             if (!_isWebReady || ReaderWebView?.CoreWebView2 == null)
             {
-                _hasPendingSync = true;
                 return;
             }
-            _hasPendingSync = false;
 
             try
             {
