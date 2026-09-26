@@ -90,8 +90,12 @@ class Program
             await TestPrabhupadaSlokasAndCanonicalTieringAsync(corpusDb);
 
             // 13. Back to Godhead (BTG), Songs of the Vaisnava Acaryas (SVA), Temple Mantra Guide (TMG) & A-Z Multi-Book Filters
-            Console.WriteLine("\n[13/13] Testing BTG, SVA, TMG Ingestion, Breadcrumbs & A–Z Multi-Book Filtering...");
+            Console.WriteLine("\n[13/14] Testing BTG, SVA, TMG Ingestion, Breadcrumbs & A–Z Multi-Book Filtering...");
             await TestBtgSvaTmgAndBookFiltersAsync(corpusDb);
+
+            // 14. Highlighting Colours Nomenclature, Customization & Backup Persistence Tests
+            Console.WriteLine("\n[14/14] Testing Highlighting Colours Nomenclature, Customization & Backup...");
+            await TestHighlightColourNomenclatureAndPaletteAsync(testUserDb);
         }
         finally
         {
@@ -752,6 +756,241 @@ Further check [[CC Adi 1.1]] for invocations.";
             var trans6 = doc6.RootElement.GetProperty("stanzas")[0].GetProperty("translation").GetString() ?? "";
             Assert(trans6.Contains("afflicted"), "TMG-6 Stanza 1 translation contains healed 'afflicted'", trans6);
             Assert(!trans6.Contains("afflic ted"), "TMG-6 Stanza 1 does not contain broken 'afflic ted'");
+        }
+
+        // 12. TMG-14 (Śikṣāṣṭaka) has authentic Introduction and no purport
+        var tmg14 = await repo.GetRecordAsync("TMG-14");
+        Assert(tmg14 != null, "TMG-14 retrieved");
+        if (tmg14?.Purports != null)
+        {
+            var doc14 = System.Text.Json.JsonDocument.Parse(tmg14.Purports);
+            Assert(doc14.RootElement.TryGetProperty("intro", out var introElem) && introElem.GetString()!.Contains("Lord Caitanya Mahāprabhu instructed His disciples"), "TMG-14 has authentic Introduction");
+            Assert(!doc14.RootElement.TryGetProperty("purport", out _), "TMG-14 has no purport field");
+            Assert(doc14.RootElement.GetProperty("stanzas").GetArrayLength() == 8, "TMG-14 has all 8 stanzas");
+        }
+
+        // 13. TMG-18 has 3 stanzas and zero garbled 8-bit Devanagari
+        var tmg18 = await repo.GetRecordAsync("TMG-18");
+        Assert(tmg18 != null, "TMG-18 retrieved");
+        if (tmg18?.Purports != null)
+        {
+            var doc18 = System.Text.Json.JsonDocument.Parse(tmg18.Purports);
+            Assert(!doc18.RootElement.TryGetProperty("purport", out _), "TMG-18 has no purport field");
+            Assert(!tmg18.Purports.Contains("NaaraYa<a&"), "TMG-18 has zero 8-bit ASCII Devanagari gibberish");
+            Assert(doc18.RootElement.GetProperty("stanzas").GetArrayLength() == 3, "TMG-18 has exactly 3 recited stanzas");
+        }
+
+        // 14. SVA-2.3 (Śrī Nāma): clean subtitle without leaked bookmarks
+        var svaSong23 = await repo.GetRecordAsync("SVA-2.3");
+        Assert(svaSong23 != null, "SVA-2.3 retrieved");
+        if (svaSong23?.Purports != null)
+        {
+            var doc23 = System.Text.Json.JsonDocument.Parse(svaSong23.Purports);
+            var sub23 = doc23.RootElement.GetProperty("subtitle").GetString() ?? "";
+            Assert(sub23 == "(from Gītāvalī)", "SVA-2.3 subtitle is cleanly '(from Gītāvalī)'", sub23);
+            Assert(!sub23.Contains("bkmk") && !sub23.Contains("*"), "SVA-2.3 subtitle has no leaked bookmarks");
+            Assert(!doc23.RootElement.TryGetProperty("purport", out _), "SVA-2.3 has no purport field");
+        }
+
+        // 15. SVA-2.5 (Gurudeva): no Audio purport tag or false purport
+        var svaSong25 = await repo.GetRecordAsync("SVA-2.5");
+        Assert(svaSong25 != null, "SVA-2.5 retrieved");
+        if (svaSong25?.Purports != null)
+        {
+            var doc25 = System.Text.Json.JsonDocument.Parse(svaSong25.Purports);
+            Assert(!doc25.RootElement.TryGetProperty("purport", out _), "SVA-2.5 has no purport field");
+            Assert(!svaSong25.Purports.Contains("Audio"), "SVA-2.5 has no leaked Audio button tag");
+        }
+
+        // 16. SVA-2.9 (Prasāda-sevāya I): clean banner title, intro instruction, no purport
+        var svaSong29 = await repo.GetRecordAsync("SVA-2.9");
+        Assert(svaSong29 != null, "SVA-2.9 retrieved");
+        if (svaSong29?.Purports != null)
+        {
+            var doc29 = System.Text.Json.JsonDocument.Parse(svaSong29.Purports);
+            var title29 = doc29.RootElement.GetProperty("bannerTitle").GetString() ?? "";
+            var intro29 = doc29.RootElement.GetProperty("intro").GetString() ?? "";
+            Assert(title29 == "Prasāda-sevāya I", "SVA-2.9 banner title is cleanly 'Prasāda-sevāya I'", title29);
+            Assert(intro29.Contains("this first song should be sung before honoring the Lord's prasāda"), "SVA-2.9 contains authentic introductory instruction", intro29);
+            Assert(!doc29.RootElement.TryGetProperty("purport", out _), "SVA-2.9 has no purport field");
+        }
+
+        // 17. Mukunda-mālā-stotra: MM 1, MM 2 clean References
+        var mm1 = await repo.GetRecordAsync("MM-(NONE)-1");
+        Assert(mm1 != null && mm1.Reference == "MM 1", "MM 1 reference is clean 'MM 1'", mm1?.Reference);
+        var mm2 = await repo.GetRecordAsync("MM-(NONE)-2");
+        Assert(mm2 != null && mm2.Reference == "MM 2", "MM 2 reference is clean 'MM 2'", mm2?.Reference);
+
+        // 18. TMG-1 (Putting on Tilaka): clean bullets, spaces after colons, and subheading
+        var tmg1Record = await repo.GetRecordAsync("TMG-1");
+        Assert(tmg1Record != null, "TMG-1 retrieved");
+        if (tmg1Record?.Purports != null)
+        {
+            var docTmg1 = System.Text.Json.JsonDocument.Parse(tmg1Record.Purports);
+            var notesTmg1 = docTmg1.RootElement.GetProperty("notes").GetString() ?? "";
+            Assert(notesTmg1.Contains("• Forehead: Śrī Keśavāya namaḥ"), "TMG-1 has bullet and space after colon for Forehead", notesTmg1);
+            Assert(notesTmg1.Contains("• Right waist: Śrī Viṣṇave namaḥ"), "TMG-1 has bullet and space after colon for Right waist", notesTmg1);
+            Assert(notesTmg1.Contains("### Tilaka Marking List"), "TMG-1 has Markdown subheading for Tilaka Marking List");
+        }
+
+        // 19. TMG-21 (Other Kīrtana Chants): structured prayer labels on stanzas
+        var tmg21Record = await repo.GetRecordAsync("TMG-21");
+        Assert(tmg21Record != null, "TMG-21 retrieved");
+        if (tmg21Record?.Purports != null)
+        {
+            var docTmg21 = System.Text.Json.JsonDocument.Parse(tmg21Record.Purports);
+            var stanzasTmg21 = docTmg21.RootElement.GetProperty("stanzas");
+            Assert(stanzasTmg21.GetArrayLength() == 3, "TMG-21 has 3 distinct prayers");
+            Assert(stanzasTmg21[0].GetProperty("label").GetString() == "Prayer to Lord Jagannātha", "TMG-21 Stanza 1 label is 'Prayer to Lord Jagannātha'");
+            Assert(stanzasTmg21[1].GetProperty("label").GetString()!.Contains("Lord Caitanya"), "TMG-21 Stanza 2 label mentions Lord Caitanya");
+            Assert(stanzasTmg21[2].GetProperty("label").GetString() == "Prayer to Lord Govinda", "TMG-21 Stanza 3 label is 'Prayer to Lord Govinda'");
+        }
+
+        // 20. TMG-27 & TMG-30: no leaked section headers or buttons in notes
+        var tmg27Record = await repo.GetRecordAsync("TMG-27");
+        Assert(tmg27Record != null && !tmg27Record.Purports!.Contains("SVA 4:"), "TMG-27 has no leaked SVA 4 section header");
+        var tmg30Record = await repo.GetRecordAsync("TMG-30");
+        Assert(tmg30Record != null && !tmg30Record.Purports!.Contains("ShowerofDivine"), "TMG-30 has no leaked ShowerofDivineCompasion tag");
+
+        // 21. Antya 1.223: clean chapter conclusion without next chapter header leak
+        var antya1223 = await repo.GetRecordAsync("ANTYA-1-223");
+        Assert(antya1223 != null, "Antya 1.223 retrieved");
+        Assert(antya1223?.Translation != null && !antya1223.Translation.Contains("Antya 2—"), "Antya 1.223 does not leak Antya 2 title/summary");
+        Assert(!antya1223!.Translation!.Contains("*Antya 2:"), "Antya 1.223 has no leaked Antya 2 bookmark tags");
+
+        // 22. BG 1.1: clean purports without leaked *ATSUM bookmark
+        var bg11 = await repo.GetRecordAsync("BG-1-1");
+        Assert(bg11 != null && !bg11.Purports!.Contains("*ATSUM"), "BG 1.1 purports contain zero leaked *ATSUM bookmark tags");
+
+        // 23. SB 4.31.31: clean canto end without 600KB file boundary leak
+        var sb43131 = await repo.GetRecordAsync("SB-4.31-31");
+        Assert(sb43131 != null, "SB 4.31.31 retrieved");
+        Assert(sb43131?.Translation != null && sb43131.Translation.EndsWith("END OF THE FOURTH CANTO"), "SB 4.31.31 ends cleanly with 'END OF THE FOURTH CANTO'", sb43131?.Translation);
+        Assert(sb43131!.Translation!.Length < 2000, "SB 4.31.31 translation is sane length under 2,000 characters", $"{sb43131.Translation.Length} chars");
+
+        // 24. SB 8.24.61: preserves Prabhupāda's genuine concluding note and ends at END OF THE EIGHTH CANTO
+        var sb82461 = await repo.GetRecordAsync("SB-8.24-61");
+        Assert(sb82461 != null, "SB 8.24.61 retrieved");
+        Assert(sb82461?.Purports != null && sb82461.Purports.Contains("This commentation has been finished in our New Delhi center today"), "SB 8.24.61 preserves Prabhupāda concluding note");
+        Assert(sb82461!.Purports!.EndsWith("END OF THE EIGHTH CANTO"), "SB 8.24.61 ends cleanly with 'END OF THE EIGHTH CANTO'");
+        Assert(!sb82461.Purports.Contains("CreationVB") && !sb82461.Purports.Contains("Ninth Canto"), "SB 8.24.61 has zero leaked Canto 9 header");
+
+        // 25. Madhya 1.287: clean chapter conclusion without leaked Madhya 2 title/summary
+        var madhya1287 = await repo.GetRecordAsync("MADHYA-1-287");
+        Assert(madhya1287 != null, "Madhya 1.287 retrieved");
+        Assert(madhya1287?.Translation != null && !madhya1287.Translation.Contains("Madhya 2—"), "Madhya 1.287 does not leak Madhya 2 title/summary");
+
+        // 26. Healed split words: caritāmṛta and Bṛhaspati
+        var healedAntya = await repo.GetRecordAsync("ANTYA-1-223");
+        Assert(healedAntya?.Translation != null && healedAntya.Translation.Contains("Caitanya-caritāmṛta"), "ANTYA 1.223 contains healed 'Caitanya-caritāmṛta'");
+        var healedSb = await repo.GetRecordAsync("SB-6.7-40");
+        Assert(healedSb?.Translation != null && healedSb.Translation.Contains("Bṛhaspati"), "SB 6.7.40 contains healed 'Bṛhaspati'");
+
+        // 27. NOD-4: healed Kṛṣṇa, no broken split text, clean topmost devotees sentence and footnote
+        var nod4 = await repo.GetRecordAsync("NOD-4");
+        Assert(nod4 != null, "NOD-4 retrieved");
+        var nod4Text = nod4?.Purports ?? nod4?.Translation ?? "";
+        Assert(nod4Text.Contains("attracted by the pastimes of the Lord in Gokula, or Vṛndāvana,* are the topmost devotees."), "NOD-4 contains authentic topmost devotees sentence");
+        Assert(nod4Text.Contains("*Vṛndāvana is the transcendental place where Kṛṣṇa enjoys His eternal pastimes as a boy"), "NOD-4 contains clean footnote paragraph");
+        Assert(!nod4Text.Contains(@"\* Vṛndāvana"), "NOD-4 contains zero leaked raw bookmark tags");
+        Assert(!nod4Text.Contains("Kṛṣ ṇa") && !nod4Text.Contains("Kṛṣṇ a"), "NOD-4 has no broken split Kṛṣṇa words");
+
+        // 28. NOD-5: healed Vaiṣṇava
+        var nod5 = await repo.GetRecordAsync("NOD-5");
+        Assert(nod5 != null, "NOD-5 retrieved");
+        var nod5Text = nod5?.Purports ?? nod5?.Translation ?? "";
+        Assert(nod5Text.Contains("This is the mystery of the Vaiṣṇava (devotional) cult."), "NOD-5 contains cleanly healed 'Vaiṣṇava (devotional) cult.'");
+        Assert(!nod5Text.Contains("Vaiṣṇ ava"), "NOD-5 contains zero broken 'Vaiṣṇ ava'");
+    }
+
+    private static async Task TestHighlightColourNomenclatureAndPaletteAsync(string testUserDb)
+    {
+        // 1. Nomenclature Assertions: Must strictly follow "Colour 1", "Colour 2", "Colour 3", etc.
+        Assert(HighlightColorHelper.GetDisplayName(HighlightColor.Colour1) == "Colour 1", "Colour 1 display name is 'Colour 1' (not Yellow)");
+        Assert(HighlightColorHelper.GetDisplayName(HighlightColor.Colour2) == "Colour 2", "Colour 2 display name is 'Colour 2' (not Green)");
+        Assert(HighlightColorHelper.GetDisplayName(HighlightColor.Colour3) == "Colour 3", "Colour 3 display name is 'Colour 3' (not Blue)");
+        Assert(HighlightColorHelper.GetDisplayName(HighlightColor.Colour4) == "Colour 4", "Colour 4 display name is 'Colour 4'");
+        Assert(HighlightColorHelper.GetDisplayName(HighlightColor.Colour5) == "Colour 5", "Colour 5 display name is 'Colour 5'");
+
+        // 2. Backward compatibility & parsing: legacy names & slot numbers resolve accurately
+        Assert(HighlightColorHelper.Parse("Yellow") == HighlightColor.Colour1, "Parse 'Yellow' maps to Colour 1");
+        Assert(HighlightColorHelper.Parse("Green") == HighlightColor.Colour2, "Parse 'Green' maps to Colour 2");
+        Assert(HighlightColorHelper.Parse("Blue") == HighlightColor.Colour3, "Parse 'Blue' maps to Colour 3");
+        Assert(HighlightColorHelper.Parse("Colour 1") == HighlightColor.Colour1, "Parse 'Colour 1' maps to Colour 1");
+        Assert(HighlightColorHelper.Parse("Colour 4") == HighlightColor.Colour4, "Parse 'Colour 4' maps to Colour 4");
+        Assert(HighlightColorHelper.Parse("4") == HighlightColor.Colour4, "Parse '4' maps to Colour 4");
+        Assert(HighlightColorHelper.ToSlot(HighlightColor.Colour1) == 1, "ToSlot(Colour1) == 1");
+        Assert(HighlightColorHelper.ToSlot(HighlightColor.Colour4) == 4, "ToSlot(Colour4) == 4");
+        Assert(HighlightColorHelper.FromSlot(1) == HighlightColor.Colour1, "FromSlot(1) == Colour1");
+        Assert(HighlightColorHelper.FromSlot(4) == HighlightColor.Colour4, "FromSlot(4) == Colour4");
+
+        // 3. Default Palette integrity
+        var defaults = HighlightColorHelper.CreateDefaultPalette();
+        Assert(defaults.Count == 3, "Default palette has 3 initial slots");
+        Assert(defaults[0].Name == "Colour 1" && defaults[0].Slot == 1, "Default slot 1 is 'Colour 1'");
+        Assert(defaults[1].Name == "Colour 2" && defaults[1].Slot == 2, "Default slot 2 is 'Colour 2'");
+        Assert(defaults[2].Name == "Colour 3" && defaults[2].Slot == 3, "Default slot 3 is 'Colour 3'");
+
+        // 4. SqliteSettingsService persistence with custom palette & migration
+        var settingsService = new SqliteSettingsService(testUserDb);
+        var initialSettings = await settingsService.GetSettingsAsync();
+        Assert(initialSettings.HighlightPalette != null && initialSettings.HighlightPalette.Count >= 3, "SqliteSettingsService loads default palette");
+
+        // 5. User changes Colour 1 to Pink (#FF80AB) and adds Colour 4 (#E57373)
+        var customPalette = new System.Collections.Generic.List<HighlightColorItem>
+        {
+            new HighlightColorItem { Slot = 1, Name = "Colour 1", HexColor = "#FF80AB" },
+            new HighlightColorItem { Slot = 2, Name = "Colour 2", HexColor = "#6F9F7A" },
+            new HighlightColorItem { Slot = 3, Name = "Colour 3", HexColor = "#5B8FC9" },
+            new HighlightColorItem { Slot = 4, Name = "Colour 4", HexColor = "#E57373" }
+        };
+        await settingsService.SetHighlightPaletteAsync(customPalette);
+
+        var reloadedSettings = await settingsService.GetSettingsAsync();
+        Assert(reloadedSettings.HighlightPalette != null && reloadedSettings.HighlightPalette.Count == 4, "Custom palette of 4 colors reloaded successfully");
+        var reloadedC1 = reloadedSettings.HighlightPalette.FirstOrDefault(p => p.Slot == 1);
+        Assert(reloadedC1?.HexColor == "#FF80AB", "Colour 1 updated property persisted as pink (#FF80AB)");
+        Assert(reloadedC1?.Name == "Colour 1", "Colour 1 name remained strictly 'Colour 1'");
+        var reloadedC4 = reloadedSettings.HighlightPalette.FirstOrDefault(p => p.Slot == 4);
+        Assert(reloadedC4?.HexColor == "#E57373" && reloadedC4?.Name == "Colour 4", "Colour 4 persisted with slot 4 and name 'Colour 4'");
+
+        // 6. Backup Service: verify palette is preserved in backup export & restore across devices
+        var userRepo = new SqliteUserRepository(testUserDb);
+        await userRepo.InitializeAsync();
+        var backupService = new ResearchDataBackupService(userRepo, settingsService, testUserDb);
+        string backupFile = Path.Combine(Path.GetTempPath(), $"palette_backup_{Guid.NewGuid():N}.vdbbackup");
+        try
+        {
+            await backupService.ExportBackupToFileAsync(backupFile);
+            Assert(File.Exists(backupFile) && new FileInfo(backupFile).Length > 0, "Backup archive exported successfully with custom highlight palette");
+
+            // Create new fresh user db simulating switching to a second device
+            string device2Db = Path.Combine(Path.GetTempPath(), $"vedabase_device2_{Guid.NewGuid():N}.db");
+            try
+            {
+                var device2Settings = new SqliteSettingsService(device2Db);
+                var device2Repo = new SqliteUserRepository(device2Db);
+                await device2Repo.InitializeAsync();
+                var device2Backup = new ResearchDataBackupService(device2Repo, device2Settings, device2Db);
+
+                var restoreResult = await device2Backup.RestoreBackupAsync(backupFile, BackupImportMode.Replace);
+                Assert(restoreResult.Success, "Backup archive restored onto second device successfully");
+
+                var device2SettingsLoaded = await device2Settings.GetSettingsAsync();
+                Assert(device2SettingsLoaded.HighlightPalette != null && device2SettingsLoaded.HighlightPalette.Count == 4, "Device 2 loaded restored 4-color highlight palette");
+                var d2C1 = device2SettingsLoaded.HighlightPalette.FirstOrDefault(p => p.Slot == 1);
+                Assert(d2C1?.HexColor == "#FF80AB", "Device 2 preserved Colour 1 custom pink (#FF80AB) color");
+                var d2C4 = device2SettingsLoaded.HighlightPalette.FirstOrDefault(p => p.Slot == 4);
+                Assert(d2C4?.Name == "Colour 4" && d2C4?.HexColor == "#E57373", "Device 2 preserved Colour 4");
+            }
+            finally
+            {
+                if (File.Exists(device2Db)) { try { File.Delete(device2Db); } catch { } }
+            }
+        }
+        finally
+        {
+            if (File.Exists(backupFile)) { try { File.Delete(backupFile); } catch { } }
         }
     }
 }

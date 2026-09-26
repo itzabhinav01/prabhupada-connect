@@ -25,6 +25,7 @@ BALARAM_MAP = {
     r"\'e6": 'ṝ', r"\'c6": 'Ṝ',
     r"\'ec": 'ṅ', r"\'cc": 'Ṅ',
     r"\'ee": 'ḷ', r"\'ce": 'Ḷ',
+    r"\'95": '• ',
     r"\'97": '—',
     r"\'96": '–',
     r"\'91": '‘', r"\'92": '’',
@@ -41,8 +42,14 @@ KNOWN_TITLE_FIXES = {
 def decode_text(t):
     if not t:
         return ""
+    t = re.sub(r'\{\\\*[^\}]*\}', '', t)
+    t = re.sub(r'\{\\v[^\}]*\}', '', t)
+    t = re.sub(r'\\v\b[^\\]*', '', t)
+    t = t.replace(r'\tab', ' ')
+    t = t.replace(r'\bullet', '• ')
     for k, v in BALARAM_MAP.items():
         t = t.replace(k, v)
+    t = t.replace(r'\line', ' ')
     t = re.sub(r'\\pard\b[^\s\\{}]*', '', t)
     t = re.sub(r'\\\*[a-zA-Z]+(?:\d+)?', '', t)
     t = re.sub(r'\\[a-zA-Z]+(?:-?[0-9]+)?\s?', '', t)
@@ -54,6 +61,11 @@ def decode_text(t):
     return re.sub(r'\s+', ' ', t).strip()
 
 def clean_rtf_block(rtf_text):
+    rtf_text = re.sub(r'\{\\\*[^\}]*\}', '', rtf_text)
+    rtf_text = re.sub(r'\{\\v[^\}]*\}', '', rtf_text)
+    rtf_text = re.sub(r'\\v\b[^\\]*', '', rtf_text)
+    rtf_text = rtf_text.replace(r'\tab', ' ')
+    rtf_text = rtf_text.replace(r'\bullet', '• ')
     for k, v in BALARAM_MAP.items():
         rtf_text = rtf_text.replace(k, v)
     rtf_text = re.sub(r'([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])\r?\n([a-zA-ZāīūṛṝḷñṅṇṭḍśṣṁṃḥĀĪŪṚṜḶÑṄṆṬḌŚṢṀṂḤ])', r'\1\2', rtf_text)
@@ -73,6 +85,9 @@ def clean_rtf_block(rtf_text):
     return cleaned
 
 def clean_title_string(raw):
+    raw = re.sub(r'\{\\\*[^\}]*\}', '', raw)
+    raw = re.sub(r'\{\\v[^\}]*\}', '', raw)
+    raw = re.sub(r'\\v\b[^\\]*', '', raw)
     t = decode_text(raw)
     if '*' in t:
         t = t.split('*')[-1].strip()
@@ -84,12 +99,17 @@ def clean_title_string(raw):
     return t
 
 def parse_sva_song_chunk(chunk):
+    chunk = re.sub(r'\{\\\*[^\}]*\}', '', chunk)
+    chunk = re.sub(r'\{\\v[^\}]*\}', '', chunk)
+    chunk = re.sub(r'\\v\b[^\\]*', '', chunk)
     raw_paras = re.split(r'\\par(?![a-zA-Z])', chunk)
     banner = ""
     subtitle = ""
     stanzas = []
     current_stanza = None
     state = 'INIT'
+    intro_paras = []
+    note_paras = []
     purport_paras = []
 
     for p in raw_paras:
@@ -106,12 +126,25 @@ def parse_sva_song_chunk(chunk):
                 if '*' in banner:
                     banner = banner.split('*')[-1].strip()
                 if len(pts) > 1:
-                    subtitle = pts[1]
+                    subtitle = "\n".join(pts[1:])
             else:
                 banner = txt
             continue
 
-        if 'Audio' in txt and len(txt) < 15:
+        if re.search(r'^\s*Audio\b', txt, re.IGNORECASE) or 'Audio' in txt:
+            continue
+
+        is_refrain = bool(re.search(r'^\(?(?:First\s+|Second\s+)?Refrain\)?', txt, re.IGNORECASE))
+        if is_refrain:
+            if current_stanza:
+                stanzas.append(current_stanza)
+            current_stanza = {
+                'label': txt,
+                'lines': [],
+                'synonyms': '',
+                'translation': ''
+            }
+            state = 'LINES'
             continue
 
         is_text_label = bool(re.match(r'^Text\s+(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen|Eighteen|Nineteen|Twenty|\d+)', txt, re.IGNORECASE))
@@ -180,21 +213,25 @@ def parse_sva_song_chunk(chunk):
                 current_stanza['translation'] = txt
             continue
 
-        if current_stanza and current_stanza.get('translation'):
-            purport_paras.append(txt)
+        if len(stanzas) == 0 and current_stanza is None:
+            intro_paras.append(txt)
         else:
-            purport_paras.append(txt)
+            note_paras.append(txt)
 
     if current_stanza:
         stanzas.append(current_stanza)
 
-    return banner, subtitle, stanzas, purport_paras
+    intro = "\n\n".join(intro_paras)
+    notes = "\n\n".join(note_paras)
+    return banner, subtitle, intro, stanzas, notes, purport_paras
 
 def parse_tmg_chunk(chunk, raw_title):
     paras = re.split(r'\\par(?![a-zA-Z])', chunk)
     stanzas = []
     current_stanza = None
-    purport_paras = []
+    subtitle_parts = []
+    intro_paras = []
+    note_paras = []
 
     clean_t = decode_text(raw_title)
     if '*' in clean_t:
@@ -207,8 +244,46 @@ def parse_tmg_chunk(chunk, raw_title):
         if not txt:
             continue
 
+        # Drop legacy non-Unicode 8-bit Devanagari gibberish (e.g. \s696 with \f48)
+        if style == 696 or r'\f48' in p or r'\f49' in p:
+            continue
+
+        # Filter out leaked headers, audio buttons, and folio bookmarks
+        if style == 7 or re.search(r'^\s*SVA\s+\d+:', txt) or 'ShowerofDivine' in txt or 'VB25' in txt or txt.strip() == 'Audio':
+            continue
+
+        # Ignore banner title repeat if style == 489
+        if style == 489:
+            pts = [decode_text(x) for x in p.split(r'\line') if decode_text(x)]
+            if pts:
+                clean_t = pts[0]
+                if len(pts) > 1:
+                    subtitle_parts.append(pts[1])
+            continue
+
+        # Subtitle paragraph before any stanzas
+        if style == 884 and len(stanzas) == 0 and current_stanza is None:
+            subtitle_parts.append(txt)
+            continue
+
+        # Section / prayer subheadings (e.g. Prayer to Lord Jagannātha, etc.)
+        if style == 900:
+            if current_stanza:
+                stanzas.append(current_stanza)
+            current_stanza = {
+                'label': txt,
+                'lines': [],
+                'synonyms': '',
+                'translation': ''
+            }
+            continue
+
+        # Subheading inside text (e.g. Tilaka Marking List)
+        if style == 897 or (txt.endswith('List') and len(txt) < 30):
+            txt = f"### {txt}"
+
         is_num = bool(re.match(r'^\(?\d+\)?$', txt))
-        if is_num or style == 1680:
+        if is_num or style in (1680, 2352):
             if current_stanza:
                 stanzas.append(current_stanza)
             num_clean = txt.strip('() ')
@@ -220,7 +295,7 @@ def parse_tmg_chunk(chunk, raw_title):
             }
             continue
 
-        if style in (2314, 9):
+        if style in (2314, 9, 2345):
             # If current stanza already has translation, this signals a new stanza!
             if current_stanza and current_stanza.get('translation'):
                 stanzas.append(current_stanza)
@@ -233,7 +308,12 @@ def parse_tmg_chunk(chunk, raw_title):
             current_stanza['lines'].extend(verse_lines)
             continue
 
-        if style in (2087, 1522):
+        # Pre-verse intro note (e.g. TMG-12 introductory statement)
+        if style == 1522 and len(stanzas) == 0 and (current_stanza is None or len(current_stanza.get('lines', [])) == 0):
+            intro_paras.append(txt)
+            continue
+
+        if style in (2087, 1522, 1713):
             if current_stanza is None:
                 current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
             if current_stanza['translation']:
@@ -242,7 +322,10 @@ def parse_tmg_chunk(chunk, raw_title):
                 current_stanza['translation'] = txt
             continue
 
-        purport_paras.append(txt)
+        if len(stanzas) == 0 and current_stanza is None:
+            intro_paras.append(txt)
+        else:
+            note_paras.append(txt)
 
     if current_stanza:
         stanzas.append(current_stanza)
@@ -254,7 +337,11 @@ def parse_tmg_chunk(chunk, raw_title):
         if re.match(r'^\(?\d+\)?', tr):
             st['label'] = ''
 
-    return clean_t, stanzas, purport_paras
+    subtitle = "\n".join(subtitle_parts)
+    intro = "\n\n".join(intro_paras)
+    notes = "\n\n".join(note_paras)
+
+    return clean_t, subtitle, intro, stanzas, notes
 
 # ======================================================================
 # INGESTION ROUTINES
@@ -445,14 +532,14 @@ def ingest_sva(conn):
         record_key = f"SVA-{sec_num}.{song_idx}"
         reference = f"SVA {sec_num}.{song_idx}"
 
-        banner, subtitle, stanzas, purports = parse_sva_song_chunk(chunk)
+        banner, subtitle, intro, stanzas, notes, purports = parse_sva_song_chunk(chunk)
 
         is_purport = "purport" in clean_t.lower()
         is_front_matter = entry_type == "Front Matter" or "Glimpse" in clean_t
 
         if is_purport:
             record_type = 'Purport'
-            purport_text = "\n\n".join(purports)
+            purport_text = "\n\n".join(purports if purports else [p for p in [intro, notes] if p])
             devanagari = None
             transliteration = None
             synonyms = None
@@ -485,15 +572,15 @@ def ingest_sva(conn):
             transliteration = "\n".join(all_lines)
             synonyms = "\n\n".join(all_syns)
             translation = "\n\n".join(all_trans)
-            purport_commentary = "\n\n".join(purports)
 
-            # Package structured song JSON for rich rendering
+            # Package structured song JSON for rich rendering (NO purport field for songs)
             song_obj = {
                 "type": "song",
                 "bannerTitle": banner or clean_t,
                 "subtitle": subtitle,
+                "intro": intro,
                 "stanzas": stanzas,
-                "purport": purport_commentary
+                "notes": notes
             }
             purports_field = json.dumps(song_obj, ensure_ascii=False)
 
@@ -520,7 +607,7 @@ def ingest_sva(conn):
         ))
 
         # Index in SearchIndex for lightning full-text search
-        search_purport = "\n\n".join(purports) if not is_purport and not is_front_matter else purports_field
+        search_purport = "\n\n".join([p for p in [intro, notes] if p]) if record_type == 'Song' else purports_field
         cur.execute("""
             INSERT OR REPLACE INTO SearchIndex (
                 RecordKey, BookKey, Reference, Devanagari, Transliteration,
@@ -618,7 +705,7 @@ def ingest_tmg(conn):
         record_key = f"TMG-{num}"
         reference = f"TMG {num}"
 
-        clean_t, stanzas, purports = parse_tmg_chunk(chunk, m.group(1))
+        clean_t, subtitle, intro, stanzas, notes = parse_tmg_chunk(chunk, m.group(1))
 
         if len(stanzas) > 0 and any(len(s.get('lines', [])) > 0 for s in stanzas):
             record_type = 'Song'
@@ -634,21 +721,21 @@ def ingest_tmg(conn):
 
             transliteration = "\n".join(all_lines)
             translation = "\n\n".join(all_trans)
-            purport_commentary = "\n\n".join(purports)
 
             song_obj = {
                 "type": "song",
                 "bannerTitle": title,
-                "subtitle": "",
+                "subtitle": subtitle,
+                "intro": intro,
                 "stanzas": stanzas,
-                "purport": purport_commentary
+                "notes": notes
             }
             purports_field = json.dumps(song_obj, ensure_ascii=False)
         else:
             record_type = 'Narrative' if "Purport" not in title else 'Purport'
             transliteration = None
             translation = None
-            purports_field = "\n\n".join(purports)
+            purports_field = "\n\n".join([p for p in [intro, notes] if p])
 
         cur.execute("""
             INSERT OR REPLACE INTO Records (
@@ -672,7 +759,7 @@ def ingest_tmg(conn):
             purports_field
         ))
 
-        search_purport = "\n\n".join(purports) if record_type == 'Song' else purports_field
+        combined_search_text = "\n\n".join([p for p in [intro, notes] if p]) if record_type == 'Song' else purports_field
         cur.execute("""
             INSERT OR REPLACE INTO SearchIndex (
                 RecordKey, BookKey, Reference, Devanagari, Transliteration,
@@ -686,7 +773,7 @@ def ingest_tmg(conn):
             transliteration,
             None,
             translation,
-            search_purport
+            combined_search_text
         ))
         inserted += 1
 

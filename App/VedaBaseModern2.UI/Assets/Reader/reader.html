@@ -13,9 +13,11 @@
 
     <!-- Floating Selection Toolbar -->
     <div id="selection-toolbar" class="selection-toolbar hidden">
-        <button class="hl-btn hl-yellow" title="Highlight Yellow" data-color="Yellow"></button>
-        <button class="hl-btn hl-green" title="Highlight Green" data-color="Green"></button>
-        <button class="hl-btn hl-blue" title="Highlight Blue" data-color="Blue"></button>
+        <div id="selection-toolbar-swatches" class="selection-toolbar-swatches">
+            <button class="hl-btn hl-colour-1" title="Colour 1" data-color="Colour1" data-slot="1"></button>
+            <button class="hl-btn hl-colour-2" title="Colour 2" data-color="Colour2" data-slot="2"></button>
+            <button class="hl-btn hl-colour-3" title="Colour 3" data-color="Colour3" data-slot="3"></button>
+        </div>
         <div class="toolbar-divider"></div>
         <button class="tool-btn" id="btn-copy-selection" title="Copy text">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>

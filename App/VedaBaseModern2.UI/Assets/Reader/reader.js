@@ -30,10 +30,12 @@
         renderVerse: renderVerse,
         renderChapter: renderChapter,
         scrollToVerse: scrollToVerse,
+        scrollToTop: forceScrollToTop,
         findSearch: findSearch,
         setActiveFindMatch: setActiveFindMatch,
         clearFindSearch: clearFindSearch,
         setTheme: setTheme,
+        setHighlightPalette: setHighlightPalette,
         setTextBrightness: setTextBrightness,
         setFontSizes: setFontSizes,
         setLineHeight: setLineHeight,
@@ -123,14 +125,22 @@
             if (!selectedText || selectedText.trim().length === 0) continue;
             const targetEscaped = escapeHtml(selectedText);
             const rawColor = h.color !== undefined ? h.color : h.Color;
-            let colorStr = 'yellow';
+            let slot = 1;
             if (typeof rawColor === 'number') {
-                colorStr = rawColor === 1 ? 'green' : (rawColor === 2 ? 'blue' : 'yellow');
+                slot = rawColor + 1;
             } else if (typeof rawColor === 'string') {
-                colorStr = rawColor.toLowerCase();
+                const lower = rawColor.toLowerCase().trim();
+                if (lower === 'yellow' || lower === 'colour1' || lower === 'colour 1' || lower === 'color 1' || lower === '1') slot = 1;
+                else if (lower === 'green' || lower === 'colour2' || lower === 'colour 2' || lower === 'color 2' || lower === '2') slot = 2;
+                else if (lower === 'blue' || lower === 'colour3' || lower === 'colour 3' || lower === 'color 3' || lower === '3') slot = 3;
+                else {
+                    const match = lower.match(/(?:colour|color)?\s*(\d+)/);
+                    if (match) slot = parseInt(match[1], 10);
+                    else slot = 1;
+                }
             }
             const id = h.id || h.Id || '';
-            const markTag = `<mark class="hl-mark-${colorStr}" data-highlight-id="${escapeHtml(id)}">${targetEscaped}</mark>`;
+            const markTag = `<mark class="hl-mark-colour-${slot}" data-highlight-id="${escapeHtml(id)}" data-slot="${slot}">${targetEscaped}</mark>`;
             escaped = escaped.split(targetEscaped).join(markTag);
         }
         return escaped;
@@ -493,9 +503,75 @@
         return true;
     }
 
-    function formatPurportParagraphs(purportText, fieldHighlights, isProseRecord) {
+    function healBrokenSanskritAndSplits(text) {
+        if (!text) return '';
+        // 1. Hyphenated word wrap: "transcen-\ndental" -> "transcendental"
+        let healed = text.replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+)-\r?\n\s*([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+)/g, '$1$2');
+
+        // 2. Heal broken words with spaces
+        healed = healed
+            .replace(/\bKṛṣ\s+ṇa\b/g, 'Kṛṣṇa')
+            .replace(/\bKṛṣṇ\s+a\b/g, 'Kṛṣṇa')
+            .replace(/\bK\s+ṛṣṇa\b/g, 'Kṛṣṇa')
+            .replace(/\bKṛ\s+ṣṇa\b/g, 'Kṛṣṇa')
+            .replace(/\bkṛṣ\s+ṇa\b/g, 'kṛṣṇa')
+            .replace(/\bkṛṣṇ\s+a\b/g, 'kṛṣṇa')
+            .replace(/\bk\s+ṛṣṇa\b/g, 'kṛṣṇa')
+            .replace(/\bkṛ\s+ṣṇa\b/g, 'kṛṣṇa')
+            .replace(/\bVaiṣṇ\s+avas\b/g, 'Vaiṣṇavas')
+            .replace(/\bVaiṣṇ\s+ava\b/g, 'Vaiṣṇava')
+            .replace(/\bVaiṣ\s+ṇavas\b/g, 'Vaiṣṇavas')
+            .replace(/\bVaiṣ\s+ṇava\b/g, 'Vaiṣṇava')
+            .replace(/\bVai\s+ṣṇavas\b/g, 'Vaiṣṇavas')
+            .replace(/\bVai\s+ṣṇava\b/g, 'Vaiṣṇava')
+            .replace(/\bbrāhma\s+ṇas\b/g, 'brāhmaṇas')
+            .replace(/\bbrāhma\s+ṇa\b/g, 'brāhmaṇa')
+            .replace(/\bbrāhmaṇ\s+as\b/g, 'brāhmaṇas')
+            .replace(/\bbrāhmaṇ\s+a\b/g, 'brāhmaṇa')
+            .replace(/\bViṣ\s+ṇu\b/g, 'Viṣṇu')
+            .replace(/\bViṣṇ\s+u\b/g, 'Viṣṇu')
+            .replace(/\bVi\s+ṣṇu\b/g, 'Viṣṇu')
+            .replace(/\bviṣ\s+ṇu\b/g, 'viṣṇu')
+            .replace(/\bV\s+ṛndāvana\b/g, 'Vṛndāvana')
+            .replace(/\bVṛ\s+ndāvana\b/g, 'Vṛndāvana')
+            .replace(/\bPurā\s+ṇas\b/g, 'Purāṇas')
+            .replace(/\bPurā\s+ṇa\b/g, 'Purāṇa')
+            .replace(/\bRādhārā\s+ṇī\b/g, 'Rādhārāṇī')
+            .replace(/\bRādhārāṇ\s+ī\b/g, 'Rādhārāṇī')
+            .replace(/\bYudhi\s+ṣṭhira\b/g, 'Yudhiṣṭhira')
+            .replace(/\bVaikuṇ\s+ṭha\b/g, 'Vaikuṇṭha')
+            .replace(/\bPāṇ\s+ḍavas\b/g, 'Pāṇḍavas')
+            .replace(/\bPaṇ\s+ḍita\b/g, 'Paṇḍita')
+            .replace(/\bpaṇ\s+ḍita\b/g, 'paṇḍita')
+            .replace(/\bDak\s+ṣa\b/g, 'Dakṣa')
+            .replace(/\bHira\s+ṇyakaśipu\b/g, 'Hiraṇyakaśipu')
+            .replace(/\bUpani\s+ṣad/g, 'Upaniṣad')
+            .replace(/\bsm\s+ṛti/g, 'smṛti')
+            .replace(/\bAm\s+ṛta\b/g, 'Amṛta')
+            .replace(/\bam\s+ṛta\b/g, 'amṛta')
+            .replace(/\bcaritāmṛ\s+ta\b/g, 'caritāmṛta')
+            .replace(/\bNṛsi\s*ṁha/g, 'Nṛsiṁha')
+            .replace(/\bP\s+ṛthu\b/g, 'Pṛthu')
+            .replace(/\bdṛ\s+ḍha\b/g, 'dṛḍha')
+            .replace(/\bkṣa\s+triya/g, 'kṣatriya')
+            .replace(/\bBhaṭṭ\s+ācārya\b/g, 'Bhaṭṭācārya')
+            .replace(/\bGuṇḍ\s+icā\b/g, 'Guṇḍicā')
+            .replace(/\bSaṅkarṣa\s+ṇa\b/g, 'Saṅkarṣaṇa')
+            .replace(/\bNārāya\s+ṇa\b/g, 'Nārāyaṇa')
+            .replace(/\bparāya\s+ṇa\b/g, 'parāyaṇa')
+            .replace(/\bṬhā\s+kura\b/g, 'Ṭhākura')
+            .replace(/\bParīk\s+ṣit\b/g, 'Parīkṣit')
+            .replace(/\brasām\s+ṛta\b/g, 'rasāmṛta')
+            .replace(/\bafflic\s+ted\b/g, 'afflicted')
+            .replace(/\\?\*\s*Vṛndāvana is the transcendental/g, '*Vṛndāvana is the transcendental');
+
+        return healed;
+    }
+
+    function formatPurportParagraphs(purportText, fieldHighlights, isProseRecord, allowDialogue = true) {
         if (!purportText) return '';
-        const paras = purportText.split(/\r?\n\s*\r?\n/);
+        const cleanedPurport = healBrokenSanskritAndSplits(purportText);
+        const paras = cleanedPurport.split(/\r?\n\s*\r?\n/);
         return paras.map(p => {
             const trimmed = p.trim();
             if (!trimmed) return '';
@@ -511,48 +587,65 @@
                 return formatQuotedVerseBlock(trimmed, fieldHighlights);
             }
 
+            // Handle bullet items (e.g. Tilaka Marking List with sacred Sanskrit mantras)
+            const bulletMatch = trimmed.match(/^[•\*]\s*([^:]+):\s*(.*)$/);
+            if (bulletMatch) {
+                const label = bulletMatch[1].trim();
+                const mantra = bulletMatch[2].trim();
+                let hlMantra = applyHighlights(mantra, fieldHighlights);
+                hlMantra = linkifyScriptureReferences(hlMantra);
+                return `<p class="song-list-item"><span class="song-list-bullet">•</span> <strong class="song-list-label">${escapeHtml(label)}:</strong> <span class="song-sanskrit-mantra">${hlMantra}</span></p>`;
+            }
+            if (trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
+                const bulletContent = trimmed.slice(2).trim();
+                let hl = applyHighlights(bulletContent, fieldHighlights);
+                hl = linkifyScriptureReferences(hl);
+                return `<p class="song-list-item"><span class="song-list-bullet">•</span> ${hl}</p>`;
+            }
 
             // Check if paragraph contains conversation dialogue (lines starting with Speaker:)
-            const rawLines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-            const hasSpeaker = rawLines.some(l => {
-                const m = l.match(dialogueSpeakerRegex);
-                return m && !speakerIgnoreKeywords.test(m[1]);
-            });
+            if (allowDialogue) {
+                const rawLines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+                const hasSpeaker = rawLines.some(l => {
+                    const m = l.match(dialogueSpeakerRegex);
+                    return m && !speakerIgnoreKeywords.test(m[1]);
+                });
 
-            if (hasSpeaker) {
-                const rendered = [];
-                let currentSpeaker = null;
-                let currentText = [];
+                if (hasSpeaker) {
+                    const rendered = [];
+                    let currentSpeaker = null;
+                    let currentText = [];
 
-                function flushCurrent() {
-                    if (currentSpeaker) {
-                        const speechText = currentText.join(' ');
-                        let hl = applyHighlights(speechText, fieldHighlights);
-                        hl = linkifyScriptureReferences(hl);
-                        rendered.push(`<p class="conversation-speech"><strong class="speaker-name">${escapeHtml(currentSpeaker)}:</strong> ${hl}</p>`);
-                        currentSpeaker = null;
-                        currentText = [];
-                    } else if (currentText.length > 0) {
-                        const normalText = currentText.join(' ');
-                        let hl = applyHighlights(normalText, fieldHighlights);
-                        hl = linkifyScriptureReferences(hl);
-                        rendered.push(`<p>${hl}</p>`);
-                        currentText = [];
+                    function flushCurrent() {
+                        if (currentSpeaker) {
+                            const speechText = currentText.join(' ');
+                            let hl = applyHighlights(speechText, fieldHighlights);
+                            hl = linkifyScriptureReferences(hl);
+                            rendered.push(`<p class="conversation-speech"><strong class="speaker-name">${escapeHtml(currentSpeaker)}:</strong> ${hl}</p>`);
+                            currentSpeaker = null;
+                            currentText = [];
+                        } else if (currentText.length > 0) {
+                            const normalText = currentText.join(' ');
+                            let hl = applyHighlights(normalText, fieldHighlights);
+                            hl = linkifyScriptureReferences(hl);
+                            rendered.push(`<p>${hl}</p>`);
+                            currentText = [];
+                        }
                     }
-                }
 
-                for (const line of rawLines) {
-                    const sm = line.match(dialogueSpeakerRegex);
-                    if (sm && !speakerIgnoreKeywords.test(sm[1])) {
-                        flushCurrent();
-                        currentSpeaker = sm[1];
-                        if (sm[2]) currentText.push(sm[2]);
-                    } else {
-                        currentText.push(line);
+                    for (const line of rawLines) {
+                        const sm = line.match(dialogueSpeakerRegex);
+                        if (sm && !speakerIgnoreKeywords.test(sm[1])) {
+                            flushCurrent();
+                            currentSpeaker = sm[1];
+                            if (sm[2]) currentText.push(sm[2]);
+                        } else {
+                            currentText.push(line);
+                        }
                     }
+                    flushCurrent();
+                    return rendered.join('');
                 }
-                flushCurrent();
-                return rendered.join('');
             }
 
             // Regular prose paragraph: normalize single linebreaks to spaces
@@ -1223,7 +1316,9 @@
 
         const bannerTitle = songData.bannerTitle || record.Title || record.Reference;
         const subtitle = songData.subtitle || '';
+        const intro = songData.intro || '';
         const stanzas = songData.stanzas || [];
+        const notesText = songData.notes || '';
         const purport = songData.purport || '';
 
         let html = `
@@ -1234,6 +1329,14 @@
                 ${subtitle ? `<div class="song-header-subtitle">${escapeHtml(subtitle)}</div>` : ''}
             </header>
         `;
+
+        if (intro) {
+            html += `
+            <div class="song-intro-block">
+                ${formatPurportParagraphs(intro, hlMap['purport'] || hlMap['translation'], false, false)}
+            </div>
+            `;
+        }
 
         if (stanzas && stanzas.length > 0) {
             html += `<div class="song-stanzas-container">`;
@@ -1279,7 +1382,15 @@
             html += `</div>`;
         }
 
-        if (purport && showPurport) {
+        if (notesText) {
+            html += `
+            <div class="song-note-block">
+                ${formatPurportParagraphs(notesText, hlMap['purport'] || hlMap['translation'], false, false)}
+            </div>
+            `;
+        }
+
+        if (purport && showPurport && record.BookKey !== 'TMG' && record.BookKey !== 'SVA') {
             html += `
             <div class="section-label song-purport-label">Purport</div>
             <div class="verse-purport song-purport-body" data-field="Purport">${formatPurportParagraphs(purport, hlMap['purport'], false)}</div>
@@ -1294,12 +1405,68 @@
         return html;
     }
 
+    // ---- Scroll Reset Engine ----
+
+    function scrollToTop(instant = true) {
+        try {
+            if ('scrollRestoration' in history) {
+                history.scrollRestoration = 'manual';
+            }
+        } catch (e) { }
+
+        try {
+            window.scrollTo({ top: 0, left: 0, behavior: instant ? 'instant' : 'smooth' });
+        } catch (e) {
+            window.scrollTo(0, 0);
+        }
+
+        if (document.scrollingElement) {
+            document.scrollingElement.scrollTop = 0;
+            document.scrollingElement.scrollLeft = 0;
+        }
+        if (document.documentElement) {
+            document.documentElement.scrollTop = 0;
+            document.documentElement.scrollLeft = 0;
+        }
+        if (document.body) {
+            document.body.scrollTop = 0;
+            document.body.scrollLeft = 0;
+        }
+        const wrapper = document.getElementById('reader-wrapper');
+        if (wrapper) {
+            wrapper.scrollTop = 0;
+        }
+        if (contentEl) {
+            contentEl.scrollTop = 0;
+        }
+    }
+
+    function forceScrollToTop() {
+        scrollToTop(true);
+        requestAnimationFrame(() => {
+            scrollToTop(true);
+            requestAnimationFrame(() => {
+                scrollToTop(true);
+            });
+        });
+        setTimeout(() => {
+            scrollToTop(true);
+        }, 0);
+        setTimeout(() => {
+            scrollToTop(true);
+        }, 25);
+        setTimeout(() => {
+            scrollToTop(true);
+        }, 75);
+    }
+
     // ---- Render Single Verse ----
 
     function renderVerse(record, options = {}, highlights = [], notes = []) {
         if (!record) return;
         stopChantingPulse();
         clearFindSearch();
+        forceScrollToTop();
 
         const showTranslit = options.showTransliteration !== false;
         const showSynonyms = options.showSynonyms !== false;
@@ -1317,7 +1484,7 @@
 
         if (songData) {
             contentEl.innerHTML = renderSongCardHtml(record, songData, options, hlMap, notes, true);
-            window.scrollTo({ top: 0, behavior: 'instant' });
+            forceScrollToTop();
             return;
         }
 
@@ -1372,7 +1539,7 @@
         }
 
         if (!isProseRecord && (record.CleanTranslation || record.Translation)) {
-            const trans = record.CleanTranslation || record.Translation;
+            const trans = healBrokenSanskritAndSplits(record.CleanTranslation || record.Translation);
             const transHighlighted = linkifyScriptureReferences(applyHighlights(trans, hlMap['translation']));
             html += `
             <div class="section-label">Translation</div>
@@ -1396,7 +1563,7 @@
 
         html += `</article>`;
         contentEl.innerHTML = html;
-        window.scrollTo({ top: 0, behavior: 'instant' });
+        forceScrollToTop();
     }
 
     // ---- Render Continuous Chapter ----
@@ -1405,6 +1572,7 @@
         if (!records || !Array.isArray(records)) return;
         stopChantingPulse();
         clearFindSearch();
+        forceScrollToTop();
 
         const showTranslit = options.showTransliteration !== false;
         const showSynonyms = options.showSynonyms !== false;
@@ -1496,7 +1664,7 @@
             }
 
             if (!isProseRecord && (record.CleanTranslation || record.Translation)) {
-                const trans = record.CleanTranslation || record.Translation;
+                const trans = healBrokenSanskritAndSplits(record.CleanTranslation || record.Translation);
                 const transHighlighted = linkifyScriptureReferences(applyHighlights(trans, hlMap['translation']));
                 html += `
                 <div class="section-label">Translation</div>
@@ -1522,10 +1690,14 @@
         }
 
         contentEl.innerHTML = html;
+        forceScrollToTop();
     }
 
     function scrollToVerse(refOrKey) {
-        if (!refOrKey) return;
+        if (!refOrKey) {
+            forceScrollToTop();
+            return;
+        }
         let el = document.getElementById(`verse-${refOrKey}`);
         if (!el) {
             const refs = document.querySelectorAll('.verse-reference');
@@ -1538,7 +1710,13 @@
         }
 
         if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (el === contentEl.firstElementChild || Math.abs(el.getBoundingClientRect().top) < 150) {
+                forceScrollToTop();
+            } else {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        } else {
+            forceScrollToTop();
         }
     }
 
@@ -1866,42 +2044,124 @@
         toolbarEl.classList.add('hidden');
     }
 
-    // Toolbar button clicks
-    document.querySelectorAll('.hl-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!currentSelectionInfo) return;
-            const color = btn.dataset.color || 'Yellow';
-            const colorClass = `hl-mark-${color.toLowerCase()}`;
+    let _activeHighlightPalette = [
+        { slot: 1, name: 'Colour 1', hexColor: '#E6A122' },
+        { slot: 2, name: 'Colour 2', hexColor: '#6F9F7A' },
+        { slot: 3, name: 'Colour 3', hexColor: '#5B8FC9' }
+    ];
 
-            const sel = window.getSelection();
-            if (sel && sel.rangeCount > 0) {
-                const range = sel.getRangeAt(0);
-                const mark = document.createElement('mark');
-                mark.className = colorClass;
-                mark.dataset.color = color;
-                try {
-                    range.surroundContents(mark);
-                } catch (ex) {
-                    const fragment = range.extractContents();
-                    mark.appendChild(fragment);
-                    range.insertNode(mark);
+    function hexToRgba(hex, alpha) {
+        if (!hex) return `rgba(230, 161, 34, ${alpha})`;
+        let c = String(hex).replace('#', '').trim();
+        if (c.length === 3) c = c.split('').map(x => x + x).join('');
+        if (c.length === 6) {
+            const r = parseInt(c.substring(0, 2), 16);
+            const g = parseInt(c.substring(2, 4), 16);
+            const b = parseInt(c.substring(4, 6), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        return hex;
+    }
+
+    function setHighlightPalette(palette) {
+        if (!palette || !Array.isArray(palette) || palette.length === 0) return;
+        _activeHighlightPalette = palette;
+        applyDynamicHighlightStyles(palette);
+        renderSelectionToolbarSwatches(palette);
+    }
+
+    function applyDynamicHighlightStyles(palette) {
+        let styleEl = document.getElementById('dynamic-highlight-palette-styles');
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = 'dynamic-highlight-palette-styles';
+            document.head.appendChild(styleEl);
+        }
+        let css = '';
+        palette.forEach(p => {
+            const slot = p.slot !== undefined ? p.slot : p.Slot;
+            const hex = p.hexColor || p.HexColor || '#E6A122';
+            const rgba = hexToRgba(hex, 0.45);
+            css += `
+                :root {
+                    --hl-colour-${slot}: ${hex};
+                    --hl-colour-${slot}-bg: ${rgba};
                 }
+                mark.hl-mark-colour-${slot}, mark.hl-mark-colour${slot} {
+                    background-color: ${rgba} !important;
+                }
+                .hl-btn.hl-colour-${slot} {
+                    background-color: ${hex} !important;
+                }
+            `;
+            if (slot === 1) {
+                css += `mark.hl-mark-yellow, .hl-mark-yellow { background-color: ${rgba} !important; } .hl-btn.hl-yellow { background-color: ${hex} !important; }`;
+            } else if (slot === 2) {
+                css += `mark.hl-mark-green, .hl-mark-green { background-color: ${rgba} !important; } .hl-btn.hl-green { background-color: ${hex} !important; }`;
+            } else if (slot === 3) {
+                css += `mark.hl-mark-blue, .hl-mark-blue { background-color: ${rgba} !important; } .hl-btn.hl-blue { background-color: ${hex} !important; }`;
             }
-
-            notifyHost({
-                action: 'add_highlight',
-                recordKey: currentSelectionInfo.recordKey,
-                field: currentSelectionInfo.field,
-                text: currentSelectionInfo.text,
-                color: color
-            });
-
-            sel?.removeAllRanges();
-            hideToolbar();
-            currentSelectionInfo = null;
         });
-    });
+        styleEl.textContent = css;
+    }
+
+    function renderSelectionToolbarSwatches(palette) {
+        const container = document.getElementById('selection-toolbar-swatches');
+        if (!container) return;
+        container.innerHTML = '';
+        palette.forEach(p => {
+            const slot = p.slot !== undefined ? p.slot : p.Slot;
+            const name = `Colour ${slot}`;
+            const hex = p.hexColor || p.HexColor || '#E6A122';
+            const btn = document.createElement('button');
+            btn.className = `hl-btn hl-colour-${slot}`;
+            btn.title = name;
+            btn.dataset.color = `Colour${slot}`;
+            btn.dataset.slot = String(slot);
+            btn.style.backgroundColor = hex;
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                applySelectionHighlight(btn.dataset.color, slot);
+            });
+            container.appendChild(btn);
+        });
+    }
+
+    function applySelectionHighlight(color, slot) {
+        if (!currentSelectionInfo) return;
+        const colorClass = `hl-mark-colour-${slot}`;
+
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            const mark = document.createElement('mark');
+            mark.className = colorClass;
+            mark.dataset.color = color;
+            mark.dataset.slot = String(slot);
+            try {
+                range.surroundContents(mark);
+            } catch (ex) {
+                const fragment = range.extractContents();
+                mark.appendChild(fragment);
+                range.insertNode(mark);
+            }
+        }
+
+        notifyHost({
+            action: 'add_highlight',
+            recordKey: currentSelectionInfo.recordKey,
+            field: currentSelectionInfo.field,
+            text: currentSelectionInfo.text,
+            color: color
+        });
+
+        sel?.removeAllRanges();
+        hideToolbar();
+        currentSelectionInfo = null;
+    }
+
+    // Initialize default swatches
+    renderSelectionToolbarSwatches(_activeHighlightPalette);
 
     document.getElementById('btn-copy-selection')?.addEventListener('click', (e) => {
         e.stopPropagation();

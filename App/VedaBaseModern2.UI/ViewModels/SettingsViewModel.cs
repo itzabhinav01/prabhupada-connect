@@ -1,12 +1,17 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using VedaBaseModern.Core.Models;
 using VedaBaseModern.Core.Repositories;
 using VedaBaseModern.Core.Services;
+using VedaBaseModern.UI.Messages;
 using VedaBaseModern.UI.Services;
 using Windows.UI;
 
@@ -30,6 +35,8 @@ namespace VedaBaseModern.UI.ViewModels
         // storage, so the On*Changed hooks below don't immediately write the
         // same value straight back to user.db.
         private bool _suppressPersist;
+
+        public ObservableCollection<HighlightColorItemViewModel> HighlightPaletteItems { get; } = new();
 
         [ObservableProperty] private bool _isLoading = true;
         [ObservableProperty] private string _errorMessage = string.Empty;
@@ -131,6 +138,14 @@ namespace VedaBaseModern.UI.ViewModels
                 ShowSynonyms = settings.ShowSynonyms;
                 ShowPurport = settings.ShowPurport;
                 ShowPronunciationGuide = settings.ShowPronunciationGuide;
+
+                HighlightPaletteItems.Clear();
+                var palette = settings.HighlightPalette ?? HighlightColorHelper.CreateDefaultPalette();
+                foreach (var p in palette)
+                {
+                    HighlightPaletteItems.Add(new HighlightColorItemViewModel(p.Slot, p.HexColor, p.Slot > 3));
+                }
+                CustomThemeService.SetHighlightPalette(palette);
 
                 if (VedaBaseModern_UI.App.Current?.ReadingPreferencesService != null)
                 {
@@ -569,6 +584,16 @@ namespace VedaBaseModern.UI.ViewModels
                 ShowSynonyms = defaults.ShowSynonyms;
                 ShowPurport = defaults.ShowPurport;
                 ShowPronunciationGuide = defaults.ShowPronunciationGuide;
+
+                HighlightPaletteItems.Clear();
+                var defPalette = HighlightColorHelper.CreateDefaultPalette();
+                foreach (var p in defPalette)
+                {
+                    HighlightPaletteItems.Add(new HighlightColorItemViewModel(p.Slot, p.HexColor, canRemove: false));
+                }
+                CustomThemeService.SetHighlightPalette(defPalette);
+                WeakReferenceMessenger.Default.Send(new HighlightPaletteChangedMessage(defPalette));
+
                 // Note: assigning ThemeIndex above already invoked
                 // OnThemeIndexChanged, which applies the theme live - no
                 // separate call needed here.
@@ -941,6 +966,106 @@ namespace VedaBaseModern.UI.ViewModels
                 System.Diagnostics.Debug.WriteLine($"[Settings] Failed to refresh backup location info: {ex.Message}");
             }
             return Task.CompletedTask;
+        }
+
+        [RelayCommand]
+        public async Task AddHighlightColourAsync()
+        {
+            int nextSlot = HighlightPaletteItems.Count > 0 ? HighlightPaletteItems.Max(i => i.Slot) + 1 : 1;
+            string[] defaultExtraHexes = { "#E57373", "#BA68C8", "#4DD0E1", "#FFB74D", "#AED581", "#F06292", "#FFD54F", "#4DB6AC" };
+            int idx = (nextSlot - 4) % defaultExtraHexes.Length;
+            if (idx < 0) idx = 0;
+            string initialHex = defaultExtraHexes[idx];
+
+            var item = new HighlightColorItemViewModel(nextSlot, initialHex, canRemove: true);
+            HighlightPaletteItems.Add(item);
+            await SaveHighlightPaletteAsync();
+        }
+
+        [RelayCommand]
+        public async Task RemoveHighlightColourAsync(HighlightColorItemViewModel item)
+        {
+            if (item == null || item.Slot <= 3) return;
+            HighlightPaletteItems.Remove(item);
+            await SaveHighlightPaletteAsync();
+        }
+
+        [RelayCommand]
+        public async Task ResetHighlightPaletteAsync()
+        {
+            HighlightPaletteItems.Clear();
+            var defaults = HighlightColorHelper.CreateDefaultPalette();
+            foreach (var p in defaults)
+            {
+                HighlightPaletteItems.Add(new HighlightColorItemViewModel(p.Slot, p.HexColor, canRemove: false));
+            }
+            await SaveHighlightPaletteAsync();
+        }
+
+        public async Task SaveHighlightPaletteAsync()
+        {
+            var list = new List<HighlightColorItem>();
+            foreach (var vm in HighlightPaletteItems)
+            {
+                list.Add(new HighlightColorItem
+                {
+                    Slot = vm.Slot,
+                    Name = HighlightColorHelper.GetDisplayNameFromSlot(vm.Slot),
+                    HexColor = vm.HexColor
+                });
+            }
+            await _settingsService.SetHighlightPaletteAsync(list);
+            CustomThemeService.SetHighlightPalette(list);
+            WeakReferenceMessenger.Default.Send(new HighlightPaletteChangedMessage(list));
+        }
+
+        public async Task OnColourHexChangedAsync(HighlightColorItemViewModel item, string newHex)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(newHex)) return;
+            item.UpdateHex(newHex);
+            await SaveHighlightPaletteAsync();
+        }
+
+        public async Task OnColourPickerChangedAsync(HighlightColorItemViewModel item, Color newColor)
+        {
+            if (item == null) return;
+            item.UpdateColor(newColor);
+            await SaveHighlightPaletteAsync();
+        }
+    }
+
+    public partial class HighlightColorItemViewModel : ObservableObject
+    {
+        [ObservableProperty] private int _slot;
+        [ObservableProperty] private string _name = string.Empty;
+        [ObservableProperty] private string _hexColor = "#E6A122";
+        [ObservableProperty] private SolidColorBrush _brush = new(Color.FromArgb(255, 0xE6, 0xA1, 0x22));
+        [ObservableProperty] private Color _color = Color.FromArgb(255, 0xE6, 0xA1, 0x22);
+        [ObservableProperty] private bool _canRemove;
+
+        public Visibility CanRemoveVisibility => CanRemove ? Visibility.Visible : Visibility.Collapsed;
+
+        public HighlightColorItemViewModel(int slot, string hexColor, bool canRemove = false)
+        {
+            _slot = slot;
+            _name = HighlightColorHelper.GetDisplayNameFromSlot(slot);
+            _canRemove = canRemove;
+            UpdateHex(hexColor);
+        }
+
+        public void UpdateHex(string hex)
+        {
+            HexColor = hex;
+            var parsed = CustomThemeService.ParseColor(hex, Color.FromArgb(255, 0xE6, 0xA1, 0x22));
+            Color = parsed;
+            Brush = new SolidColorBrush(parsed);
+        }
+
+        public void UpdateColor(Color newColor)
+        {
+            Color = newColor;
+            HexColor = $"#{newColor.R:X2}{newColor.G:X2}{newColor.B:X2}";
+            Brush = new SolidColorBrush(newColor);
         }
     }
 }

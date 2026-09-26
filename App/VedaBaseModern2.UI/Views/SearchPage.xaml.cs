@@ -232,5 +232,11 @@ namespace VedaBaseModern.UI.Views
         public Visibility BoolToVis(bool b) => b ? Visibility.Visible : Visibility.Collapsed;
         public Visibility InverseBoolToVis(bool b) => b ? Visibility.Collapsed : Visibility.Visible;
         public bool Not(bool b) => !b;
+
+        public Visibility HighlightColorBadgeVisibility(string category, HighlightColor? color) =>
+            category == "Highlight" && color.HasValue ? Visibility.Visible : Visibility.Collapsed;
+
+        public string HighlightColorName(HighlightColor? color) =>
+            color.HasValue ? HighlightColorHelper.GetDisplayName(color.Value) : string.Empty;
     }
 }

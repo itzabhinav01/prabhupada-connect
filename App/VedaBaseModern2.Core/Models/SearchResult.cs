@@ -31,5 +31,10 @@ namespace VedaBaseModern.Core.Models
         public int StartOffset { get; set; } = -1;
         public int Length { get; set; } = -1;
         public HighlightColor? HighlightColor { get; set; }
+
+        public bool HasHighlightColor => HighlightColor.HasValue;
+        public string HighlightColorDisplayName => HighlightColor.HasValue
+            ? HighlightColorHelper.GetDisplayName(HighlightColor.Value)
+            : string.Empty;
     }
 }

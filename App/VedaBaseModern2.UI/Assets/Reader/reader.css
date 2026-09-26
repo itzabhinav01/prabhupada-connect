@@ -35,17 +35,23 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
+html {
     width: 100%;
-    height: 100%;
+    min-height: 100%;
+    background-color: var(--bg-color);
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+body {
+    width: 100%;
+    min-height: 100%;
     background-color: var(--bg-color);
     color: var(--text-primary);
     font-family: var(--font-family-serif);
     font-size: 16px;
     line-height: 1.6;
     overflow-x: hidden;
-    overflow-y: auto;
-    scroll-behavior: smooth;
     user-select: text;
     -webkit-user-select: text;
 }
@@ -390,35 +396,34 @@ html, body {
 }
 
 /* Persisted Highlights */
-mark.hl-mark-yellow, .hl-mark-yellow {
-    background-color: rgba(230, 161, 34, 0.45) !important;
+mark[class*="hl-mark-"] {
     color: inherit !important;
     border-radius: 3px;
     padding: 1px 2px;
     cursor: pointer;
     transition: filter 0.15s ease;
 }
-mark.hl-mark-green, .hl-mark-green {
-    background-color: rgba(111, 159, 122, 0.45) !important;
-    color: inherit !important;
-    border-radius: 3px;
-    padding: 1px 2px;
-    cursor: pointer;
-    transition: filter 0.15s ease;
-}
-mark.hl-mark-blue, .hl-mark-blue {
-    background-color: rgba(91, 143, 201, 0.45) !important;
-    color: inherit !important;
-    border-radius: 3px;
-    padding: 1px 2px;
-    cursor: pointer;
-    transition: filter 0.15s ease;
+mark[class*="hl-mark-"]:hover {
+    filter: brightness(1.2);
 }
 
-mark.hl-mark-yellow:hover,
-mark.hl-mark-green:hover,
-mark.hl-mark-blue:hover {
-    filter: brightness(1.2);
+mark.hl-mark-colour-1, mark.hl-mark-colour1, mark.hl-mark-yellow, .hl-mark-yellow {
+    background-color: var(--hl-colour-1-bg, rgba(230, 161, 34, 0.45)) !important;
+}
+mark.hl-mark-colour-2, mark.hl-mark-colour2, mark.hl-mark-green, .hl-mark-green {
+    background-color: var(--hl-colour-2-bg, rgba(111, 159, 122, 0.45)) !important;
+}
+mark.hl-mark-colour-3, mark.hl-mark-colour3, mark.hl-mark-blue, .hl-mark-blue {
+    background-color: var(--hl-colour-3-bg, rgba(91, 143, 201, 0.45)) !important;
+}
+mark.hl-mark-colour-4, mark.hl-mark-colour4 {
+    background-color: var(--hl-colour-4-bg, rgba(229, 115, 115, 0.45)) !important;
+}
+mark.hl-mark-colour-5, mark.hl-mark-colour5 {
+    background-color: var(--hl-colour-5-bg, rgba(186, 104, 200, 0.45)) !important;
+}
+mark.hl-mark-colour-6, mark.hl-mark-colour6 {
+    background-color: var(--hl-colour-6-bg, rgba(77, 208, 225, 0.45)) !important;
 }
 
 /* In-Page Find Search Matches (Ctrl+F) */
@@ -473,13 +478,22 @@ mark.find-match.active {
     transition: transform 0.15s ease;
 }
 
+.selection-toolbar-swatches {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .hl-btn:hover {
     transform: scale(1.2);
 }
 
-.hl-btn.hl-yellow { background-color: #E6A122; }
-.hl-btn.hl-green { background-color: #6F9F7A; }
-.hl-btn.hl-blue { background-color: #5B8FC9; }
+.hl-btn.hl-colour-1, .hl-btn.hl-yellow { background-color: var(--hl-colour-1, #E6A122); }
+.hl-btn.hl-colour-2, .hl-btn.hl-green { background-color: var(--hl-colour-2, #6F9F7A); }
+.hl-btn.hl-colour-3, .hl-btn.hl-blue { background-color: var(--hl-colour-3, #5B8FC9); }
+.hl-btn.hl-colour-4 { background-color: var(--hl-colour-4, #E57373); }
+.hl-btn.hl-colour-5 { background-color: var(--hl-colour-5, #BA68C8); }
+.hl-btn.hl-colour-6 { background-color: var(--hl-colour-6, #4DD0E1); }
 
 .toolbar-divider {
     width: 1px;
@@ -1889,6 +1903,29 @@ body.theme-light #hit-navigation-hud {
     font-style: italic;
     color: var(--text-secondary);
     font-family: var(--font-family-serif);
+    margin-top: 4px;
+    white-space: pre-line;
+}
+
+.song-intro-block {
+    margin: 0 auto 32px auto;
+    max-width: 760px;
+    padding: 18px 24px;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid var(--accent-color);
+    border-radius: 6px;
+    font-size: var(--font-size-purport);
+    line-height: var(--line-height-purport);
+    color: var(--text-primary);
+    text-align: justify;
+}
+
+.song-intro-block p {
+    margin-bottom: 12px;
+}
+
+.song-intro-block p:last-child {
+    margin-bottom: 0;
 }
 
 .song-stanzas-container {
@@ -1969,4 +2006,58 @@ body.theme-light #hit-navigation-hud {
 
 .song-purport-body {
     margin-top: 14px;
+}
+
+.song-note-block {
+    margin: 36px auto 20px auto;
+    max-width: 760px;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+    border: 1px dashed var(--card-border);
+    font-size: var(--font-size-purport);
+    line-height: var(--line-height-purport);
+    color: var(--text-secondary);
+    text-align: justify;
+}
+
+.song-note-block p {
+    margin-bottom: 10px;
+}
+
+.song-note-block p:last-child {
+    margin-bottom: 0;
+}
+
+.song-list-item {
+    margin-bottom: 8px;
+    line-height: 1.8;
+    font-size: var(--font-size-purport, 16px);
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px;
+    text-align: left;
+}
+
+.song-list-bullet {
+    color: var(--accent-color);
+    font-weight: 700;
+    margin-right: 4px;
+    user-select: none;
+}
+
+.song-list-label {
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+}
+
+.song-sanskrit-mantra {
+    color: var(--color-sanskrit-verse, #F5C542);
+    font-style: italic;
+    font-family: var(--font-family-sanskrit, var(--font-family-serif));
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }

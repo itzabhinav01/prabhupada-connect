@@ -1,7 +1,103 @@
 using System;
+using System.Collections.Generic;
 
 namespace VedaBaseModern.Core.Models
 {
+    /// <summary>
+    /// Discrete highlight color slots. Named strictly following the nomenclature
+    /// Colour 1, Colour 2, Colour 3, Colour 4... Legacy names (Yellow, Green, Blue)
+    /// map directly to slots 0, 1, 2 for complete backward compatibility with
+    /// existing databases and serialized payloads.
+    /// </summary>
+    public enum HighlightColor
+    {
+        Yellow = 0,
+        Colour1 = 0,
+        Green = 1,
+        Colour2 = 1,
+        Blue = 2,
+        Colour3 = 2,
+        Colour4 = 3,
+        Colour5 = 4,
+        Colour6 = 5,
+        Colour7 = 6,
+        Colour8 = 7,
+        Colour9 = 8,
+        Colour10 = 9,
+        Colour11 = 10,
+        Colour12 = 11,
+        Colour13 = 12,
+        Colour14 = 13,
+        Colour15 = 14,
+        Colour16 = 15
+    }
+
+    /// <summary>
+    /// User-customizable highlight palette definition item.
+    /// The Name strictly follows the immutable nomenclature "Colour {Slot}".
+    /// </summary>
+    public class HighlightColorItem
+    {
+        public int Slot { get; set; } = 1;
+        public string Name { get; set; } = "Colour 1";
+        public string HexColor { get; set; } = "#E6A122";
+    }
+
+    public static class HighlightColorHelper
+    {
+        public static int ToSlot(HighlightColor color) => (int)color + 1;
+        public static HighlightColor FromSlot(int slot) => (HighlightColor)Math.Max(0, slot - 1);
+        public static string GetDisplayName(HighlightColor color) => $"Colour {ToSlot(color)}";
+        public static string GetDisplayNameFromSlot(int slot) => $"Colour {slot}";
+
+        public static HighlightColor Parse(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return HighlightColor.Colour1;
+            var trimmed = text.Trim();
+            if (string.Equals(trimmed, "Yellow", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Colour1", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Colour 1", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Color 1", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "1", StringComparison.OrdinalIgnoreCase))
+            {
+                return HighlightColor.Colour1;
+            }
+            if (string.Equals(trimmed, "Green", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Colour2", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Colour 2", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Color 2", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "2", StringComparison.OrdinalIgnoreCase))
+            {
+                return HighlightColor.Colour2;
+            }
+            if (string.Equals(trimmed, "Blue", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Colour3", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Colour 3", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "Color 3", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "3", StringComparison.OrdinalIgnoreCase))
+            {
+                return HighlightColor.Colour3;
+            }
+            var m = System.Text.RegularExpressions.Regex.Match(trimmed, @"(?:colour|color)?\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (m.Success && int.TryParse(m.Groups[1].Value, out int slot) && slot >= 1)
+            {
+                return FromSlot(slot);
+            }
+            if (Enum.TryParse<HighlightColor>(trimmed, ignoreCase: true, out var parsed))
+            {
+                return parsed;
+            }
+            return HighlightColor.Colour1;
+        }
+
+        public static List<HighlightColorItem> CreateDefaultPalette() => new()
+        {
+            new HighlightColorItem { Slot = 1, Name = "Colour 1", HexColor = "#E6A122" },
+            new HighlightColorItem { Slot = 2, Name = "Colour 2", HexColor = "#6F9F7A" },
+            new HighlightColorItem { Slot = 3, Name = "Colour 3", HexColor = "#5B8FC9" }
+        };
+    }
+
     /// <summary>
     /// A research note. Always belongs to a verse via RecordKey (a note with
     /// no scripture association at all is not yet supported by the schema -
@@ -89,14 +185,6 @@ namespace VedaBaseModern.Core.Models
         public string Value { get; set; } = string.Empty;
         public DateTime UpdatedUtc { get; set; }
     }
-
-    /// <summary>
-    /// One of a small fixed set of highlight colors. Deliberately not a raw
-    /// color value - a closed set keeps the annotation system restrained and
-    /// theme-consistent (see App.xaml's Highlight* brushes) rather than an
-    /// arbitrary color picker.
-    /// </summary>
-    public enum HighlightColor { Yellow, Green, Blue }
 
     /// <summary>
     /// A precise, persistent annotation over an EXACT character range within

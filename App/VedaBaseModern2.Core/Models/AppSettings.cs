@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace VedaBaseModern.Core.Models
 {
     public enum AppTheme { System, Light, Dark, Custom }
@@ -27,6 +30,7 @@ namespace VedaBaseModern.Core.Models
         public bool ShowSynonyms { get; set; } = true;
         public bool ShowPurport { get; set; } = true;
         public bool ShowPronunciationGuide { get; set; } = true;
+        public List<HighlightColorItem> HighlightPalette { get; set; } = HighlightColorHelper.CreateDefaultPalette();
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
     }
 }

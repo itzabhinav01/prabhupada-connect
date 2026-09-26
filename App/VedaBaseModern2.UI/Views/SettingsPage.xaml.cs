@@ -770,6 +770,51 @@ namespace VedaBaseModern.UI.Views
             }
         }
 
+        private async void HighlightColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+        {
+            if (sender?.Tag is HighlightColorItemViewModel item)
+            {
+                await ViewModel.OnColourPickerChangedAsync(item, args.NewColor);
+            }
+        }
+
+        private async void HighlightHexTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox tb && tb.Tag is HighlightColorItemViewModel item)
+            {
+                await ViewModel.OnColourHexChangedAsync(item, tb.Text);
+            }
+        }
+
+        private async void HighlightHexTextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                if (sender is TextBox tb && tb.Tag is HighlightColorItemViewModel item)
+                {
+                    await ViewModel.OnColourHexChangedAsync(item, tb.Text);
+                }
+            }
+        }
+
+        private async void AddHighlightColour_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.AddHighlightColourCommand.ExecuteAsync(null);
+        }
+
+        private async void RemoveHighlightColour_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is HighlightColorItemViewModel item)
+            {
+                await ViewModel.RemoveHighlightColourCommand.ExecuteAsync(item);
+            }
+        }
+
+        private async void ResetHighlightPalette_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.ResetHighlightPaletteCommand.ExecuteAsync(null);
+        }
+
         public Visibility BoolToVis(bool b) => b ? Visibility.Visible : Visibility.Collapsed;
         public Visibility BoolToInvertedVis(bool b) => b ? Visibility.Collapsed : Visibility.Visible;
         public Visibility StringToVis(string? s) => string.IsNullOrWhiteSpace(s) ? Visibility.Collapsed : Visibility.Visible;

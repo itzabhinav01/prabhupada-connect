@@ -10,9 +10,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.Web.WebView2.Core;
+using CommunityToolkit.Mvvm.Messaging;
 using VedaBaseModern.Core.Models;
 using VedaBaseModern.UI.ViewModels;
 using VedaBaseModern.UI.Services;
+using VedaBaseModern.UI.Messages;
 using VedaBaseModern_UI;
 
 namespace VedaBaseModern.UI.Views
@@ -45,6 +47,11 @@ namespace VedaBaseModern.UI.Views
             {
                 App.Current.ReadingPreferencesService.TextBrightnessChanged += (brightness) => SyncBrightnessToWeb();
             }
+
+            WeakReferenceMessenger.Default.Register<HighlightPaletteChangedMessage>(this, (r, m) =>
+            {
+                SyncHighlightPaletteToWeb();
+            });
         }
 
         private static void LogDebug(string msg)
@@ -316,6 +323,7 @@ namespace VedaBaseModern.UI.Views
             {
                 _isWebReady = true;
                 SyncThemeToWeb();
+                SyncHighlightPaletteToWeb();
                 SyncBrightnessToWeb();
                 SyncContentToWeb();
             }
@@ -353,6 +361,7 @@ namespace VedaBaseModern.UI.Views
                     case "ready":
                         _isWebReady = true;
                         SyncThemeToWeb();
+                        SyncHighlightPaletteToWeb();
                         SyncBrightnessToWeb();
                         SyncContentToWeb();
                         break;
@@ -535,16 +544,14 @@ namespace VedaBaseModern.UI.Views
                 string recordKey = el.GetProperty("recordKey").GetString() ?? "";
                 string field = el.GetProperty("field").GetString() ?? "";
                 string text = el.GetProperty("text").GetString() ?? "";
-                string colorStr = el.GetProperty("color").GetString() ?? "Yellow";
+                string colorStr = el.GetProperty("color").GetString() ?? "Colour1";
 
-                if (Enum.TryParse<HighlightColor>(colorStr, true, out var color))
+                var color = HighlightColorHelper.Parse(colorStr);
+                var created = await App.Current.UserRepository.AddHighlightAsync(recordKey, field, 0, text.Length, text, color);
+                if (created != null && !string.IsNullOrEmpty(created.Id) && _isWebReady && ReaderWebView?.CoreWebView2 != null)
                 {
-                    var created = await App.Current.UserRepository.AddHighlightAsync(recordKey, field, 0, text.Length, text, color);
-                    if (created != null && !string.IsNullOrEmpty(created.Id) && _isWebReady && ReaderWebView?.CoreWebView2 != null)
-                    {
-                        string escapedText = JsonSerializer.Serialize(text);
-                        await ReaderWebView.ExecuteScriptAsync($"reader.attachHighlightId('{created.Id}', {escapedText});");
-                    }
+                    string escapedText = JsonSerializer.Serialize(text);
+                    await ReaderWebView.ExecuteScriptAsync($"reader.attachHighlightId('{created.Id}', {escapedText});");
                 }
             }
             catch (Exception ex)
@@ -661,7 +668,15 @@ namespace VedaBaseModern.UI.Views
                     if (ViewModel.CurrentRecord != null && !string.IsNullOrEmpty(ViewModel.CurrentRecord.RecordKey))
                     {
                         string refKey = ViewModel.CurrentRecord.RecordKey;
-                        await ReaderWebView.ExecuteScriptAsync($"reader.scrollToVerse('{refKey}');");
+                        var firstKey = ViewModel.ChapterRecords?.FirstOrDefault()?.RecordKey;
+                        if (!string.IsNullOrEmpty(firstKey) && refKey == firstKey)
+                        {
+                            await ReaderWebView.ExecuteScriptAsync("reader.scrollToTop();");
+                        }
+                        else
+                        {
+                            await ReaderWebView.ExecuteScriptAsync($"reader.scrollToVerse('{refKey}');");
+                        }
                     }
                 }
                 else if (ViewModel.CurrentRecord != null && !string.IsNullOrEmpty(ViewModel.CurrentRecord.RecordKey))
@@ -682,6 +697,7 @@ namespace VedaBaseModern.UI.Views
                         }}";
                     string res = await ReaderWebView.ExecuteScriptAsync(verseScript);
                     LogDebug($"renderVerse executed, result={res}");
+                    _ = ReaderWebView.ExecuteScriptAsync("window.reader && window.reader.scrollToTop && window.reader.scrollToTop();");
                 }
             }
             catch (Exception ex)
@@ -804,6 +820,22 @@ namespace VedaBaseModern.UI.Views
 
             string themeJson = JsonSerializer.Serialize(themeObj);
             await ReaderWebView.ExecuteScriptAsync($"reader.setTheme({themeJson});");
+        }
+
+        private async void SyncHighlightPaletteToWeb()
+        {
+            if (!_isWebReady || ReaderWebView?.CoreWebView2 == null) return;
+            try
+            {
+                var settings = await App.Current.SettingsService.GetSettingsAsync();
+                var palette = settings.HighlightPalette ?? HighlightColorHelper.CreateDefaultPalette();
+                string json = JsonSerializer.Serialize(palette);
+                await ReaderWebView.ExecuteScriptAsync($"reader.setHighlightPalette({json});");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ReadingPage] SyncHighlightPaletteToWeb error: {ex}");
+            }
         }
 
         private async void SyncBrightnessToWeb()

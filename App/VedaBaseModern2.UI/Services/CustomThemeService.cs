@@ -443,8 +443,74 @@ namespace VedaBaseModern.UI.Services
             return isDark ? Color.FromArgb(255, 0xE5, 0xA9, 0x3C) : Color.FromArgb(255, 0xA6, 0x3A, 0x2A);
         }
 
+        private static List<HighlightColorItem>? _activeHighlightPalette;
+
+        public static List<HighlightColorItem> ActiveHighlightPalette
+        {
+            get => _activeHighlightPalette ??= HighlightColorHelper.CreateDefaultPalette();
+            set
+            {
+                _activeHighlightPalette = value;
+                UpdateHighlightBrushes();
+            }
+        }
+
+        public static void SetHighlightPalette(List<HighlightColorItem>? palette)
+        {
+            if (palette != null && palette.Count > 0)
+            {
+                _activeHighlightPalette = palette;
+            }
+            else
+            {
+                _activeHighlightPalette = HighlightColorHelper.CreateDefaultPalette();
+            }
+            UpdateHighlightBrushes();
+        }
+
+        public static void UpdateHighlightBrushes()
+        {
+            try
+            {
+                if (Application.Current?.Resources == null) return;
+                bool isDark = ActiveCustomTheme is { } custom
+                    ? !string.Equals(custom.BaseTheme, "Light", StringComparison.OrdinalIgnoreCase)
+                    : Application.Current.RequestedTheme == ApplicationTheme.Dark;
+
+                var res = Application.Current.Resources;
+                var c1 = GetHighlightColor(HighlightColor.Colour1, isDark);
+                var c2 = GetHighlightColor(HighlightColor.Colour2, isDark);
+                var c3 = GetHighlightColor(HighlightColor.Colour3, isDark);
+
+                res["HighlightYellowBrush"] = new SolidColorBrush(c1);
+                res["HighlightGreenBrush"] = new SolidColorBrush(c2);
+                res["HighlightBlueBrush"] = new SolidColorBrush(c3);
+
+                if (_activeHighlightPalette != null)
+                {
+                    foreach (var item in _activeHighlightPalette)
+                    {
+                        var col = ParseColor(item.HexColor, c1);
+                        res[$"HighlightColour{item.Slot}Brush"] = new SolidColorBrush(col);
+                    }
+                }
+            }
+            catch { }
+        }
+
         public static Color GetHighlightColor(HighlightColor color, bool isDark)
         {
+            int slot = HighlightColorHelper.ToSlot(color);
+            if (_activeHighlightPalette != null)
+            {
+                var match = _activeHighlightPalette.Find(p => p.Slot == slot);
+                if (match != null && !string.IsNullOrWhiteSpace(match.HexColor))
+                {
+                    Color fallback = GetDefaultHighlightColor(slot, isDark);
+                    return ParseColor(match.HexColor, fallback);
+                }
+            }
+
             if (ActiveCustomTheme != null)
             {
                 string hex = color switch
@@ -453,22 +519,23 @@ namespace VedaBaseModern.UI.Services
                     HighlightColor.Green => ActiveCustomTheme.HighlightGreen,
                     _ => ActiveCustomTheme.HighlightBlue
                 };
-                Color fallback = color switch
-                {
-                    HighlightColor.Yellow => isDark ? Color.FromArgb(255, 0xF0, 0xD8, 0x70) : Color.FromArgb(255, 0xE6, 0xA1, 0x22),
-                    HighlightColor.Green => isDark ? Color.FromArgb(255, 0xA8, 0xD6, 0xB0) : Color.FromArgb(255, 0x6F, 0x9F, 0x7A),
-                    _ => isDark ? Color.FromArgb(255, 0xA6, 0xC8, 0xE8) : Color.FromArgb(255, 0x5B, 0x8F, 0xC9)
-                };
+                Color fallback = GetDefaultHighlightColor(slot, isDark);
                 return ParseColor(hex, fallback);
             }
 
-            return color switch
-            {
-                HighlightColor.Yellow => isDark ? Color.FromArgb(255, 0xF0, 0xD8, 0x70) : Color.FromArgb(255, 0xE6, 0xA1, 0x22),
-                HighlightColor.Green => isDark ? Color.FromArgb(255, 0xA8, 0xD6, 0xB0) : Color.FromArgb(255, 0x6F, 0x9F, 0x7A),
-                _ => isDark ? Color.FromArgb(255, 0xA6, 0xC8, 0xE8) : Color.FromArgb(255, 0x5B, 0x8F, 0xC9)
-            };
+            return GetDefaultHighlightColor(slot, isDark);
         }
+
+        private static Color GetDefaultHighlightColor(int slot, bool isDark) => slot switch
+        {
+            1 => isDark ? Color.FromArgb(255, 0xF0, 0xD8, 0x70) : Color.FromArgb(255, 0xE6, 0xA1, 0x22),
+            2 => isDark ? Color.FromArgb(255, 0xA8, 0xD6, 0xB0) : Color.FromArgb(255, 0x6F, 0x9F, 0x7A),
+            3 => isDark ? Color.FromArgb(255, 0xA6, 0xC8, 0xE8) : Color.FromArgb(255, 0x5B, 0x8F, 0xC9),
+            4 => isDark ? Color.FromArgb(255, 0xEF, 0x9A, 0x9A) : Color.FromArgb(255, 0xE5, 0x73, 0x73),
+            5 => isDark ? Color.FromArgb(255, 0xCE, 0x93, 0xD8) : Color.FromArgb(255, 0xBA, 0x68, 0xC8),
+            6 => isDark ? Color.FromArgb(255, 0x80, 0xDE, 0xEA) : Color.FromArgb(255, 0x4D, 0xD0, 0xE1),
+            _ => isDark ? Color.FromArgb(255, 0xF0, 0xD8, 0x70) : Color.FromArgb(255, 0xE6, 0xA1, 0x22)
+        };
 
         public static Color ParseColor(string? hex, Color fallback)
         {

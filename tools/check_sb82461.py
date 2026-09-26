@@ -3,6 +3,6 @@ import sys
 
 sys.stdout.reconfigure(encoding='utf-8')
 conn = sqlite3.connect('Database/prabhupada_corpus.db')
-row = conn.execute("SELECT sql FROM sqlite_master WHERE name='SearchIndex'").fetchone()
-print(row[0] if row else "None")
+row = conn.execute("SELECT Purports FROM Records WHERE RecordKey = 'SB-8.24-61'").fetchone()
+print(row[0][-1200:])
 conn.close()

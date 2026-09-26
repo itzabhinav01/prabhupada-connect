@@ -17,24 +17,21 @@ namespace VedaBaseModern.UI.Converters
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            HighlightColor hc = value is HighlightColor color ? color : HighlightColor.Yellow;
-            string key = hc switch
-            {
-                HighlightColor.Yellow => "HighlightYellowBrush",
-                HighlightColor.Green => "HighlightGreenBrush",
-                HighlightColor.Blue => "HighlightBlueBrush",
-                _ => "HighlightYellowBrush"
-            };
-            if (Application.Current?.Resources.TryGetValue(key, out var brush) == true && brush is Brush b)
-            {
-                return b;
-            }
+            HighlightColor hc = HighlightColor.Colour1;
+            if (value is HighlightColor color) hc = color;
+            else if (value is string s) hc = HighlightColorHelper.Parse(s);
+            else if (value is int slot) hc = HighlightColorHelper.FromSlot(slot);
 
             bool isDark = CustomThemeService.ActiveCustomTheme is { } custom
                 ? !string.Equals(custom.BaseTheme, "Light", StringComparison.OrdinalIgnoreCase)
                 : Application.Current?.RequestedTheme == ApplicationTheme.Dark;
 
-            return new SolidColorBrush(CustomThemeService.GetHighlightColor(hc, isDark));
+            var col = CustomThemeService.GetHighlightColor(hc, isDark);
+            if (parameter is string p && (p.Equals("semi", StringComparison.OrdinalIgnoreCase) || p.Equals("alpha", StringComparison.OrdinalIgnoreCase)))
+            {
+                return new SolidColorBrush(Windows.UI.Color.FromArgb(102, col.R, col.G, col.B));
+            }
+            return new SolidColorBrush(col);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();

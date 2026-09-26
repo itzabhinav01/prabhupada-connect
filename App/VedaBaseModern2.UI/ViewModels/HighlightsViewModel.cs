@@ -4,8 +4,11 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Messaging;
 using VedaBaseModern.Core.Models;
 using VedaBaseModern.Core.Repositories;
+using VedaBaseModern.UI.Messages;
+using VedaBaseModern.UI.Services;
 
 namespace VedaBaseModern.UI.ViewModels
 {
@@ -28,13 +31,7 @@ namespace VedaBaseModern.UI.ViewModels
         public bool IsLegacyBlockLevel { get; set; }
         public int StartOffset { get; set; } = -1;
         public int Length { get; set; } = -1;
-        public string ColorDisplayName => Color switch
-        {
-            HighlightColor.Yellow => "Saffron", // Phase 4.9.4: legacy identifier, new display name/color
-            HighlightColor.Green => "Green",
-            HighlightColor.Blue => "Blue",
-            _ => Color.ToString()
-        };
+        public string ColorDisplayName => HighlightColorHelper.GetDisplayName(Color);
         // The exact highlighted phrase for a precision highlight; for a
         // legacy (Phase 4.6, whole-block) highlight there is no captured
         // phrase, so the block name is shown instead - never invented text.
@@ -106,6 +103,11 @@ namespace VedaBaseModern.UI.ViewModels
         {
             _corpusRepository = corpusRepository;
             _userRepository = userRepository;
+
+            WeakReferenceMessenger.Default.Register<HighlightPaletteChangedMessage>(this, async (r, m) =>
+            {
+                await LoadHighlightsAsync();
+            });
         }
 
         partial void OnSelectedScriptureFilterChanged(ScriptureFilterOption? value)
@@ -156,13 +158,6 @@ namespace VedaBaseModern.UI.ViewModels
             FilteredCountText = FilteredHighlights.Count == 1 ? "1 highlight" : $"{FilteredHighlights.Count} highlights";
             IsFilterEmpty = FilteredHighlights.Count == 0;
         }
-
-        private static readonly (HighlightColor Color, string Name)[] ColorNames =
-        {
-            (HighlightColor.Yellow, "Saffron"), // legacy identifier, new display name (Phase 4.9.4)
-            (HighlightColor.Green, "Green"),
-            (HighlightColor.Blue, "Blue"),
-        };
 
         public async Task LoadHighlightsAsync()
         {
@@ -236,10 +231,12 @@ namespace VedaBaseModern.UI.ViewModels
                     ? ScriptureFilterOptions.FirstOrDefault(o => o.BookKey == prevBookKey) ?? ScriptureFilterOptions[0]
                     : ScriptureFilterOptions[0];
 
-                ColorFilterOptions.Add(new ColorFilterOption { IsAll = true, Name = "All Colors" });
-                foreach (var (color, name) in ColorNames)
+                ColorFilterOptions.Add(new ColorFilterOption { IsAll = true, Name = "All Colours" });
+                var palette = CustomThemeService.ActiveHighlightPalette;
+                foreach (var p in palette)
                 {
-                    ColorFilterOptions.Add(new ColorFilterOption { Color = color, Name = name });
+                    var color = HighlightColorHelper.FromSlot(p.Slot);
+                    ColorFilterOptions.Add(new ColorFilterOption { Color = color, Name = p.Name });
                 }
                 SelectedColorFilter = prevColor.HasValue
                     ? ColorFilterOptions.FirstOrDefault(o => o.Color == prevColor.Value) ?? ColorFilterOptions[0]

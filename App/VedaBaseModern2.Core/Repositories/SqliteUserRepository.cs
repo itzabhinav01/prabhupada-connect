@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using VedaBaseModern.Core.Models;
@@ -436,6 +437,11 @@ namespace VedaBaseModern.Core.Repositories
                     UpdatedUtc TEXT NOT NULL
                 );
             "),
+
+            // 14 -> 15: Highlighting Palette Configuration
+            (15, @"
+                ALTER TABLE UserSettings ADD COLUMN HighlightPalette TEXT NULL;
+            "),
         };
 
         public async Task InitializeAsync()
@@ -797,7 +803,7 @@ namespace VedaBaseModern.Core.Repositories
             Id = reader.GetString(0),
             RecordKey = reader.GetString(1),
             Field = reader.GetString(2),
-            Color = Enum.TryParse<HighlightColor>(reader.GetString(3), ignoreCase: true, out var c) ? c : HighlightColor.Yellow,
+            Color = HighlightColorHelper.Parse(reader.GetString(3)),
             CreatedUtc = DateTime.Parse(reader.GetString(4)),
             StartOffset = reader.GetInt32(5),
             Length = reader.GetInt32(6),
@@ -1289,7 +1295,7 @@ namespace VedaBaseModern.Core.Repositories
                             Field = hlReader.GetString(1),
                             StartOffset = hlReader.GetInt32(2),
                             Length = hlReader.GetInt32(3),
-                            Color = Enum.TryParse<HighlightColor>(hlReader.GetString(4), out var hc) ? hc : HighlightColor.Yellow,
+                            Color = HighlightColorHelper.Parse(hlReader.GetString(4)),
                             TimestampUtc = DateTime.Parse(hlReader.GetString(5)),
                             ContentSnippet = hlReader.GetString(6)
                         });
@@ -1315,7 +1321,7 @@ namespace VedaBaseModern.Core.Repositories
                             Field = r.GetString(1),
                             StartOffset = r.GetInt32(2),
                             Length = r.GetInt32(3),
-                            Color = Enum.TryParse<HighlightColor>(r.GetString(4), out var hc2) ? hc2 : HighlightColor.Yellow,
+                            Color = HighlightColorHelper.Parse(r.GetString(4)),
                             TimestampUtc = DateTime.Parse(r.GetString(5)),
                             ContentSnippet = r.GetString(6)
                         });
@@ -1507,11 +1513,14 @@ namespace VedaBaseModern.Core.Repositories
                 // 7. Update UserSettings
                 if (payload.Settings != null)
                 {
+                    string? paletteJson = payload.Settings.HighlightPalette != null && payload.Settings.HighlightPalette.Count > 0
+                        ? JsonSerializer.Serialize(payload.Settings.HighlightPalette)
+                        : null;
                     using var cmd = conn.CreateCommand();
                     cmd.Transaction = tx;
                     cmd.CommandText = @"
-                        INSERT INTO UserSettings (Id, Theme, FontSize, ReadingWidth, LineSpacing, FocusModeEnabled, ShowTransliteration, ShowSynonyms, ShowPurport, UpdatedUtc)
-                        VALUES (1, $theme, $fontSize, $width, $spacing, $focus, $showTranslit, $showSyn, $showPurport, $updated)
+                        INSERT INTO UserSettings (Id, Theme, FontSize, ReadingWidth, LineSpacing, FocusModeEnabled, ShowTransliteration, ShowSynonyms, ShowPurport, UpdatedUtc, HighlightPalette)
+                        VALUES (1, $theme, $fontSize, $width, $spacing, $focus, $showTranslit, $showSyn, $showPurport, $updated, $palette)
                         ON CONFLICT(Id) DO UPDATE SET
                             Theme = excluded.Theme,
                             FontSize = excluded.FontSize,
@@ -1521,6 +1530,7 @@ namespace VedaBaseModern.Core.Repositories
                             ShowTransliteration = excluded.ShowTransliteration,
                             ShowSynonyms = excluded.ShowSynonyms,
                             ShowPurport = excluded.ShowPurport,
+                            HighlightPalette = COALESCE(excluded.HighlightPalette, UserSettings.HighlightPalette),
                             UpdatedUtc = excluded.UpdatedUtc;";
                     cmd.Parameters.AddWithValue("$theme", payload.Settings.Theme.ToString());
                     cmd.Parameters.AddWithValue("$fontSize", payload.Settings.FontSize.ToString());
@@ -1530,6 +1540,7 @@ namespace VedaBaseModern.Core.Repositories
                     cmd.Parameters.AddWithValue("$showTranslit", payload.Settings.ShowTransliteration ? 1 : 0);
                     cmd.Parameters.AddWithValue("$showSyn", payload.Settings.ShowSynonyms ? 1 : 0);
                     cmd.Parameters.AddWithValue("$showPurport", payload.Settings.ShowPurport ? 1 : 0);
+                    cmd.Parameters.AddWithValue("$palette", (object?)paletteJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("$updated", payload.Settings.UpdatedUtc.ToString("O"));
                     cmd.ExecuteNonQuery();
                 }
@@ -1866,6 +1877,9 @@ namespace VedaBaseModern.Core.Repositories
 
                     if (shouldUpdate)
                     {
+                        string? paletteJson = payload.Settings.HighlightPalette != null && payload.Settings.HighlightPalette.Count > 0
+                            ? JsonSerializer.Serialize(payload.Settings.HighlightPalette)
+                            : null;
                         using var cmd = conn.CreateCommand();
                         cmd.Transaction = tx;
                         cmd.CommandText = @"
@@ -1878,6 +1892,7 @@ namespace VedaBaseModern.Core.Repositories
                                 ShowTransliteration = $showTranslit,
                                 ShowSynonyms = $showSyn,
                                 ShowPurport = $showPurport,
+                                HighlightPalette = COALESCE($palette, HighlightPalette),
                                 UpdatedUtc = $updated
                             WHERE Id = 1";
                         cmd.Parameters.AddWithValue("$theme", payload.Settings.Theme.ToString());
@@ -1888,6 +1903,7 @@ namespace VedaBaseModern.Core.Repositories
                         cmd.Parameters.AddWithValue("$showTranslit", payload.Settings.ShowTransliteration ? 1 : 0);
                         cmd.Parameters.AddWithValue("$showSyn", payload.Settings.ShowSynonyms ? 1 : 0);
                         cmd.Parameters.AddWithValue("$showPurport", payload.Settings.ShowPurport ? 1 : 0);
+                        cmd.Parameters.AddWithValue("$palette", (object?)paletteJson ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("$updated", payload.Settings.UpdatedUtc.ToString("O"));
                         cmd.ExecuteNonQuery();
                     }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using VedaBaseModern.Core.Models;
 
@@ -22,6 +23,7 @@ namespace VedaBaseModern.Core.Repositories
         Task SetShowSynonymsAsync(bool enabled);
         Task SetShowPurportAsync(bool enabled);
         Task SetShowPronunciationGuideAsync(bool enabled);
+        Task SetHighlightPaletteAsync(List<HighlightColorItem> palette);
         Task ResetToDefaultsAsync();
     }
 }

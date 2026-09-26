@@ -35,14 +35,21 @@ public partial class App : Application
     public AppTheme StartupTheme => _startupTheme;
     private AppTheme _startupTheme = AppTheme.System;
 
+    private readonly string _crashLogPath = Path.Combine(AppContext.BaseDirectory, "crash.txt");
+
     public App()
     {
-        string crashLogPath = Path.Combine(AppContext.BaseDirectory, "crash.txt");
+        try
+        {
+            System.IO.File.WriteAllText(_crashLogPath, $"App starting at {DateTime.UtcNow}...\n");
+        }
+        catch { }
+
         this.UnhandledException += (sender, args) =>
         {
             try
             {
-                System.IO.File.WriteAllText(crashLogPath, $"Xaml Unhandled: {args.Message}\n{args.Exception}\nStackTrace: {args.Exception?.StackTrace}");
+                System.IO.File.AppendAllText(_crashLogPath, $"Xaml Unhandled: {args.Message}\n{args.Exception}\nStackTrace: {args.Exception?.StackTrace}\n");
             }
             catch { }
             args.Handled = true;
@@ -51,7 +58,7 @@ public partial class App : Application
         {
             try
             {
-                System.IO.File.AppendAllText(crashLogPath, $"\nDomain Unhandled: {args.ExceptionObject}");
+                System.IO.File.AppendAllText(_crashLogPath, $"\nDomain Unhandled: {args.ExceptionObject}");
             }
             catch { }
         };
@@ -59,7 +66,7 @@ public partial class App : Application
         {
             try
             {
-                System.IO.File.AppendAllText(crashLogPath, $"\nTask Unhandled: {args.Exception}");
+                System.IO.File.AppendAllText(_crashLogPath, $"\nTask Unhandled: {args.Exception}");
             }
             catch { }
         };
@@ -152,6 +159,7 @@ public partial class App : Application
             Task.Run(async () => await UserRepository.InitializeAsync()).Wait();
             var settings = Task.Run(async () => await SettingsService.GetSettingsAsync()).GetAwaiter().GetResult();
             _startupTheme = settings.Theme;
+            CustomThemeService.SetHighlightPalette(settings.HighlightPalette);
         }
         catch
         {
@@ -168,34 +176,44 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
-        var mainWindow = (MainWindow)_window;
-        MainWindowInstance = mainWindow;
-
-        if (_startupTheme == AppTheme.Custom)
+        try
         {
-            var customTheme = Task.Run(async () => await CustomThemeService.LoadThemeAsync()).GetAwaiter().GetResult();
-            CustomThemeService.ApplyCustomTheme(customTheme, mainWindow);
-        }
-        else
-        {
-            mainWindow.ApplyTheme(ToElementTheme(_startupTheme));
-        }
+            System.IO.File.AppendAllText(_crashLogPath, "OnLaunched starting...\n");
+            _window = new MainWindow();
+            var mainWindow = (MainWindow)_window;
+            MainWindowInstance = mainWindow;
 
-        _window.Activate();
-
-        // Trigger automatic scheduled local research backup in background
-        _ = Task.Run(async () =>
-        {
-            try
+            if (_startupTheme == AppTheme.Custom)
             {
-                await BackupService.EnsureAutomaticLocalBackupAsync();
+                var customTheme = Task.Run(async () => await CustomThemeService.LoadThemeAsync()).GetAwaiter().GetResult();
+                CustomThemeService.ApplyCustomTheme(customTheme, mainWindow);
             }
-            catch (Exception ex)
+            else
             {
-                System.Diagnostics.Debug.WriteLine($"[App] Auto-backup on startup failed: {ex}");
+                mainWindow.ApplyTheme(ToElementTheme(_startupTheme));
             }
-        });
+
+            _window.Activate();
+            System.IO.File.AppendAllText(_crashLogPath, "OnLaunched completed successfully!\n");
+
+            // Trigger automatic scheduled local research backup in background
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await BackupService.EnsureAutomaticLocalBackupAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Auto-backup on startup failed: {ex}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.AppendAllText(_crashLogPath, $"OnLaunched Exception: {ex}\nStackTrace: {ex.StackTrace}\n");
+            throw;
+        }
     }
 
     public MainWindow? MainWindowInstance { get; private set; }

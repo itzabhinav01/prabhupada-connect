@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using VedaBaseModern.Core.Models;
@@ -31,7 +33,7 @@ namespace VedaBaseModern.Core.Repositories
                 using var cmd = conn.CreateCommand();
                 try
                 {
-                    cmd.CommandText = "SELECT Theme, FontSize, ReadingWidth, LineSpacing, FocusModeEnabled, ShowTransliteration, ShowSynonyms, ShowPurport, UpdatedUtc, ShowPronunciationGuide FROM UserSettings WHERE Id = 1";
+                    cmd.CommandText = "SELECT Theme, FontSize, ReadingWidth, LineSpacing, FocusModeEnabled, ShowTransliteration, ShowSynonyms, ShowPurport, UpdatedUtc, ShowPronunciationGuide, HighlightPalette FROM UserSettings WHERE Id = 1";
                 }
                 catch
                 {
@@ -46,6 +48,28 @@ namespace VedaBaseModern.Core.Repositories
                         showPronunciation = reader.GetInt32(9) != 0;
                     }
 
+                    List<HighlightColorItem> palette = HighlightColorHelper.CreateDefaultPalette();
+                    if (reader.FieldCount > 10 && !reader.IsDBNull(10))
+                    {
+                        try
+                        {
+                            string paletteJson = reader.GetString(10);
+                            if (!string.IsNullOrWhiteSpace(paletteJson))
+                            {
+                                var loaded = JsonSerializer.Deserialize<List<HighlightColorItem>>(paletteJson);
+                                if (loaded != null && loaded.Count > 0)
+                                {
+                                    foreach (var item in loaded)
+                                    {
+                                        item.Name = HighlightColorHelper.GetDisplayNameFromSlot(item.Slot);
+                                    }
+                                    palette = loaded;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
                     return new AppSettings
                     {
                         Theme = ParseEnumSafe(reader.IsDBNull(0) ? null : reader.GetString(0), AppTheme.System),
@@ -57,6 +81,7 @@ namespace VedaBaseModern.Core.Repositories
                         ShowSynonyms = reader.IsDBNull(6) || reader.GetInt32(6) != 0,
                         ShowPurport = reader.IsDBNull(7) || reader.GetInt32(7) != 0,
                         ShowPronunciationGuide = showPronunciation,
+                        HighlightPalette = palette,
                         UpdatedUtc = reader.IsDBNull(8) ? DateTime.UtcNow : (DateTime.TryParse(reader.GetString(8), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var dt) ? dt : DateTime.UtcNow)
                     };
                 }
@@ -168,9 +193,21 @@ namespace VedaBaseModern.Core.Repositories
             if (_cached != null) _cached.ShowPronunciationGuide = enabled;
         }
 
+        public async Task SetHighlightPaletteAsync(List<HighlightColorItem> palette)
+        {
+            string json = JsonSerializer.Serialize(palette);
+            try
+            {
+                await UpdateAsync("HighlightPalette", json);
+            }
+            catch { }
+            if (_cached != null) _cached.HighlightPalette = palette;
+        }
+
         public async Task ResetToDefaultsAsync()
         {
             var defaults = new AppSettings();
+            string paletteJson = JsonSerializer.Serialize(defaults.HighlightPalette);
             await Task.Run(() =>
             {
                 using var conn = new SqliteConnection(_connectionString);
@@ -188,6 +225,7 @@ namespace VedaBaseModern.Core.Repositories
                         ShowSynonyms = $showSyn,
                         ShowPurport = $showPurport,
                         ShowPronunciationGuide = $showPronun,
+                        HighlightPalette = $palette,
                         UpdatedUtc = $now
                     WHERE Id = 1";
                 cmd.Parameters.AddWithValue("$theme", defaults.Theme.ToString());
@@ -199,6 +237,7 @@ namespace VedaBaseModern.Core.Repositories
                 cmd.Parameters.AddWithValue("$showSyn", defaults.ShowSynonyms ? 1 : 0);
                 cmd.Parameters.AddWithValue("$showPurport", defaults.ShowPurport ? 1 : 0);
                 cmd.Parameters.AddWithValue("$showPronun", defaults.ShowPronunciationGuide ? 1 : 0);
+                cmd.Parameters.AddWithValue("$palette", paletteJson);
                 cmd.Parameters.AddWithValue("$now", nowIso);
                 try
                 {
