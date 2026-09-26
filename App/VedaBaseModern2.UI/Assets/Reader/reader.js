@@ -1846,13 +1846,54 @@
         activeLexiconCard = card;
 
         const rect = targetEl.getBoundingClientRect();
-        const top = window.scrollY + rect.bottom + 6;
-        let left = window.scrollX + rect.left;
-        if (left + 330 > window.innerWidth) {
-            left = Math.max(10, window.innerWidth - 340);
+        const cardHeight = card.offsetHeight || 140;
+        const cardWidth = card.offsetWidth || 320;
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+
+        const spaceBelow = viewportHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const gap = 8;
+
+        let top;
+        let placement = 'below';
+
+        // Conscious adaptive positioning:
+        // If not enough space below, present upwards;
+        // if not enough space above, popup below.
+        if (spaceBelow >= cardHeight + gap) {
+            top = window.scrollY + rect.bottom + gap;
+            placement = 'below';
+        } else if (spaceAbove >= cardHeight + gap) {
+            top = window.scrollY + rect.top - cardHeight - gap;
+            placement = 'above';
+        } else {
+            // When space is constrained on both ends, choose the side with more available space
+            if (spaceAbove > spaceBelow) {
+                top = window.scrollY + rect.top - cardHeight - gap;
+                placement = 'above';
+            } else {
+                top = window.scrollY + rect.bottom + gap;
+                placement = 'below';
+            }
+            // Clamp within visible viewport margins
+            const minTop = window.scrollY + 8;
+            const maxTop = window.scrollY + viewportHeight - cardHeight - 8;
+            top = Math.max(minTop, Math.min(top, maxTop));
         }
-        card.style.top = `${top}px`;
-        card.style.left = `${left}px`;
+
+        // Horizontal alignment with boundary clamping
+        let left = window.scrollX + rect.left;
+        if (left + cardWidth > window.scrollX + viewportWidth - 16) {
+            left = window.scrollX + viewportWidth - cardWidth - 16;
+        }
+        if (left < window.scrollX + 16) {
+            left = window.scrollX + 16;
+        }
+
+        card.classList.add(`placement-${placement}`);
+        card.style.top = `${Math.round(top)}px`;
+        card.style.left = `${Math.round(left)}px`;
 
         card.querySelector('#btn-lex-explore')?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1866,9 +1907,15 @@
         });
     }
 
-    // Dismiss lexicon card when clicking outside
+    // Dismiss lexicon card when clicking outside or pressing Escape
     document.addEventListener('click', (e) => {
         if (activeLexiconCard && !activeLexiconCard.contains(e.target) && !e.target.closest('.sanskrit-word')) {
+            hideLexiconCard();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && activeLexiconCard) {
             hideLexiconCard();
         }
     });
