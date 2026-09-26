@@ -724,5 +724,24 @@ Further check [[CC Adi 1.1]] for invocations.";
         Assert(tmgBook != null, "TMG book found in library hierarchy");
         var tmgRec = tmgBook?.Chapters.SelectMany(c => c.Records).FirstOrDefault(r => r.RecordKey == "TMG-6");
         Assert(tmgRec != null && tmgRec.Reference.Contains("Gurv"), "TMG 6 record Reference contains mantra name ('Gurv-aṣṭaka')", tmgRec?.Reference);
+
+        // 9. Zero-book search (Clear All) safely returns 0 hits
+        var (zeroHits, zeroCount) = await repo.SearchAsync("prabhupada", bookKeys: Array.Empty<string>());
+        Assert(zeroCount == 0 && zeroHits.Count == 0, "Empty bookKeys array returns 0 hits", zeroCount.ToString());
+
+        // 10. TMG 10 has 5 stanzas with authentic line-by-line translation
+        var tmg10 = await repo.GetRecordAsync("TMG-10");
+        Assert(tmg10 != null, "TMG-10 record retrieved");
+        Assert(tmg10?.Purports?.Contains("\"type\": \"song\"") == true || tmg10?.Purports?.Contains("\"type\":\"song\"") == true, "TMG-10 stored as structured song JSON");
+        if (tmg10?.Purports != null)
+        {
+            var doc = System.Text.Json.JsonDocument.Parse(tmg10.Purports);
+            var stanzasElem = doc.RootElement.GetProperty("stanzas");
+            Assert(stanzasElem.GetArrayLength() == 5, "TMG-10 has exactly 5 stanzas", stanzasElem.GetArrayLength().ToString());
+            var s1Lines = stanzasElem[0].GetProperty("lines");
+            Assert(s1Lines.GetArrayLength() == 2, "TMG-10 Stanza 1 has 2 distinct lines", s1Lines.GetArrayLength().ToString());
+            var s1Trans = stanzasElem[0].GetProperty("translation").GetString() ?? "";
+            Assert(s1Trans.StartsWith("1)"), "TMG-10 Stanza 1 translation starts with '1)'", s1Trans);
+        }
     }
 }

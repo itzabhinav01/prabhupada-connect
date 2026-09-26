@@ -119,11 +119,20 @@ namespace VedaBaseModern.UI.Views
         private void SelectAllBooks_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.SelectAllBooks(true);
+            RefreshBookFilterListView();
         }
 
         private void ClearAllBooks_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.SelectAllBooks(false);
+            RefreshBookFilterListView();
+        }
+
+        private void RefreshBookFilterListView()
+        {
+            var items = ViewModel.FilteredBookItems;
+            BookFilterListView.ItemsSource = null;
+            BookFilterListView.ItemsSource = items;
         }
 
         private void BookCheckBox_Click(object sender, RoutedEventArgs e)

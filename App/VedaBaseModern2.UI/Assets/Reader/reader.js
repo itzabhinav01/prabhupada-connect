@@ -1239,7 +1239,7 @@
             html += `<div class="song-stanzas-container">`;
             for (let i = 0; i < stanzas.length; i++) {
                 const st = stanzas[i];
-                const label = st.label || (stanzas.length > 1 ? `Text ${i + 1}` : '');
+                const label = st.label || '';
                 const lines = st.lines || [];
                 const syns = st.synonyms || '';
                 const trans = st.translation || '';
@@ -1267,8 +1267,9 @@
 
                 if (trans && showTranslation) {
                     const transHl = linkifyScriptureReferences(applyHighlights(trans, hlMap['translation']));
+                    const showTransLabel = !lines.length && !syns;
                     html += `
-                    <div class="song-section-label">TRANSLATION</div>
+                    ${showTransLabel ? `<div class="song-section-label">TRANSLATION</div>` : ''}
                     <div class="verse-translation song-translation">${transHl}</div>
                     `;
                 }

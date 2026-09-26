@@ -149,10 +149,14 @@ def parse_sva_song_chunk(chunk):
             continue
 
         if style == 9:
+            if current_stanza and current_stanza.get('translation'):
+                stanzas.append(current_stanza)
+                current_stanza = None
             if current_stanza is None:
                 current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
                 state = 'LINES'
-            current_stanza['lines'].append(txt)
+            lines = [decode_text(x) for x in p.split(r'\line') if decode_text(x)]
+            current_stanza['lines'].extend(lines)
             continue
 
         if state == 'SYNONYMS' or style == 1962:
@@ -204,8 +208,9 @@ def parse_tmg_chunk(chunk, raw_title):
         if is_num or style == 1680:
             if current_stanza:
                 stanzas.append(current_stanza)
+            num_clean = txt.strip('() ')
             current_stanza = {
-                'label': f"Text {txt.strip('() ')}",
+                'label': f"Text {num_clean}",
                 'lines': [],
                 'synonyms': '',
                 'translation': ''
@@ -213,9 +218,16 @@ def parse_tmg_chunk(chunk, raw_title):
             continue
 
         if style in (2314, 9):
+            # If current stanza already has translation, this signals a new stanza!
+            if current_stanza and current_stanza.get('translation'):
+                stanzas.append(current_stanza)
+                current_stanza = None
             if current_stanza is None:
                 current_stanza = {'label': '', 'lines': [], 'synonyms': '', 'translation': ''}
-            current_stanza['lines'].append(txt)
+            
+            # Split on \line to preserve individual poetic verse lines!
+            verse_lines = [decode_text(line_part) for line_part in p.split(r'\line') if decode_text(line_part)]
+            current_stanza['lines'].extend(verse_lines)
             continue
 
         if style in (2087, 1522):
@@ -231,6 +243,13 @@ def parse_tmg_chunk(chunk, raw_title):
 
     if current_stanza:
         stanzas.append(current_stanza)
+
+    # For stanzas where translation starts with a number like '1)' or '(1)',
+    # clear redundant 'label' so it cleanly matches the authentic style!
+    for st in stanzas:
+        tr = (st.get('translation') or '').strip()
+        if re.match(r'^\(?\d+\)?', tr):
+            st['label'] = ''
 
     return clean_t, stanzas, purport_paras
 

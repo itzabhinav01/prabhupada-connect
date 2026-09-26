@@ -264,8 +264,14 @@ namespace VedaBaseModern.UI.ViewModels
 
         public void UpdateSelectedBooksFromCheckboxes()
         {
-            var selected = FilterableBooks.Where(b => b.IsSelected).ToList();
-            if (selected.Count == 0 || selected.Count == FilterableBooks.Count)
+            var selected = FilterableBooks.Where(b => b.IsSelected == true).ToList();
+            if (selected.Count == 0)
+            {
+                CheckedBookKeys = new List<string>();
+                SelectedBooksSummary = "No Books Selected";
+                SelectedBooksCountText = "0 selected";
+            }
+            else if (selected.Count == FilterableBooks.Count)
             {
                 CheckedBookKeys = null;
                 SelectedBooksSummary = "All Books (A–Z)";
@@ -287,11 +293,19 @@ namespace VedaBaseModern.UI.ViewModels
 
         public void SyncCheckboxesFromKeys()
         {
-            if (_checkedBookKeys == null || _checkedBookKeys.Count == 0)
+            if (_checkedBookKeys == null)
             {
                 foreach (var b in FilterableBooks) b.IsSelected = true;
                 SelectedBooksSummary = "All Books (A–Z)";
                 SelectedBooksCountText = "All selected";
+                return;
+            }
+
+            if (_checkedBookKeys.Count == 0)
+            {
+                foreach (var b in FilterableBooks) b.IsSelected = false;
+                SelectedBooksSummary = "No Books Selected";
+                SelectedBooksCountText = "0 selected";
                 return;
             }
 
@@ -314,8 +328,14 @@ namespace VedaBaseModern.UI.ViewModels
                 }
             }
 
-            if (count == 0 || count == FilterableBooks.Count)
+            if (count == 0)
             {
+                SelectedBooksSummary = "No Books Selected";
+                SelectedBooksCountText = "0 selected";
+            }
+            else if (count == FilterableBooks.Count)
+            {
+                CheckedBookKeys = null;
                 SelectedBooksSummary = "All Books (A–Z)";
                 SelectedBooksCountText = "All selected";
             }
@@ -479,6 +499,22 @@ namespace VedaBaseModern.UI.ViewModels
 
             try
             {
+                if (CheckedBookKeys != null && CheckedBookKeys.Count == 0)
+                {
+                    Results.Clear();
+                    TotalResults = 0;
+                    _totalScriptureCount = 0;
+                    HasMoreResults = false;
+                    StatusText = "No books selected. Please check at least one book in the filter.";
+                    FacetOptions[0] = "All (0)";
+                    FacetOptions[1] = "Scripture (0)";
+                    FacetOptions[2] = "My Notes (0)";
+                    FacetOptions[3] = "Bookmarks (0)";
+                    FacetOptions[4] = "My Highlights (0)";
+                    ApplyFacetFilter();
+                    return;
+                }
+
                 var query = SearchText.Trim();
                 string? filterKey = (CheckedBookKeys != null && CheckedBookKeys.Count > 0)
                     ? null
@@ -543,12 +579,25 @@ namespace VedaBaseModern.UI.ViewModels
         }
     }
 
-    public partial class BookFilterItem : ObservableObject
+    public class BookFilterItem : System.ComponentModel.INotifyPropertyChanged
     {
         public string BookKey { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
 
-        [ObservableProperty]
-        private bool _isSelected = true;
+        private bool? _isSelected = true;
+        public bool? IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected)));
+                }
+            }
+        }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     }
 }

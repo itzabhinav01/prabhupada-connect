@@ -1010,7 +1010,11 @@ namespace VedaBaseModern.Core.Repositories
                     // see ExcludeDuplicateContentSql / Phase 2H canonical-edition finding)
                     using var countCmd = connection.CreateCommand();
                     string countSql = $"SELECT COUNT(*) FROM RecordsFts fts JOIN Records r ON r.rowid = fts.rowid WHERE RecordsFts MATCH $query AND {ExcludeDuplicateContentSql("r")}";
-                    if (expandedMultiKeys.Count > 0)
+                    if (bookKeys != null && !bookKeys.Any())
+                    {
+                        countSql += " AND 1=0";
+                    }
+                    else if (expandedMultiKeys.Count > 0)
                     {
                         var placeholders = new List<string>();
                         for (int i = 0; i < expandedMultiKeys.Count; i++)
@@ -1066,7 +1070,11 @@ namespace VedaBaseModern.Core.Repositories
                         LEFT JOIN Books b ON b.BookKey = r.BookKey
                         WHERE RecordsFts MATCH $query AND {ExcludeDuplicateContentSql("r")} ";
 
-                    if (expandedMultiKeys.Count > 0)
+                    if (bookKeys != null && !bookKeys.Any())
+                    {
+                        querySql += " AND 1=0 ";
+                    }
+                    else if (expandedMultiKeys.Count > 0)
                     {
                         var placeholders = new List<string>();
                         for (int i = 0; i < expandedMultiKeys.Count; i++)
