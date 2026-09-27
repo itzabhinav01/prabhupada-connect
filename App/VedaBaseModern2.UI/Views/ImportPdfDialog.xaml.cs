@@ -19,6 +19,7 @@ namespace VedaBaseModern.UI.Views
         {
             this.InitializeComponent();
             this.PrimaryButtonClick += ImportPdfDialog_PrimaryButtonClick;
+            this.Loaded += (s, e) => VedaBaseModern.UI.Services.CustomThemeService.SyncDialogTheme(this, this.XamlRoot);
         }
 
         private async void BrowseButton_Click(object sender, RoutedEventArgs e)

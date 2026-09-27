@@ -28,6 +28,9 @@
                     <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#A8BDB4" />
                     <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="#F2F4F3" />
                     <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush" Color="#234D3C" />
+                    <SolidColorBrush x:Key="ContentDialogBackground" Color="#16382A" />
+                    <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#16382A" />
+                    <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#234D3C" />
 
                     <!-- Selection highlight resources for Dark Mode (Phase 4.9: vibrant, high-contrast blue with white text). -->
                     <Color x:Key="TextControlSelectionHighlightColor">#1E6FD9</Color>
@@ -50,6 +53,9 @@
                     <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#16382A" />
                     <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#133024" />
                     <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#16382A" />
+                    <SolidColorBrush x:Key="ContentDialogBackground" Color="#16382A" />
+                    <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#16382A" />
+                    <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#234D3C" />
                     <SolidColorBrush x:Key="SystemAccentColor" Color="#D4AF37" />
                     <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#D4AF37" />
                     <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#C5A059" />
@@ -85,6 +91,9 @@
                     <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#F7DCAF" />
                     <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#F5D8A9" />
                     <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#F7DCAF" />
+                    <SolidColorBrush x:Key="ContentDialogBackground" Color="#F7DCAF" />
+                    <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#F7DCAF" />
+                    <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#DFBD86" />
                     <SolidColorBrush x:Key="SystemAccentColor" Color="#9B6818" />
                     <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#9B6818" />
                     <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#8C5A13" />

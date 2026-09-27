@@ -108,11 +108,12 @@ namespace VedaBaseModern.UI.Views
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
                 });
 
-                contentPanel.Children.Add(new TextBlock
+                var countsBlock = new TextBlock
                 {
                     Text = $"Contains: {m.Counts.Bookmarks} bookmarks, {m.Counts.Highlights} highlights, {m.Counts.Notes} notes, {m.Counts.Collections} collections.",
-                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
-                });
+                    Foreground = VedaBaseModern.UI.Services.CustomThemeService.GetThemeBrush("TextFillColorSecondaryBrush", dialog.RequestedTheme)
+                };
+                contentPanel.Children.Add(countsBlock);
 
                 var radioGroup = new RadioButtons
                 {
@@ -123,12 +124,13 @@ namespace VedaBaseModern.UI.Views
                 radioGroup.Items.Add(new RadioButton { Content = "Replace (Clean Restore) — Erases current personal research data and restores from backup" });
                 contentPanel.Children.Add(radioGroup);
 
-                contentPanel.Children.Add(new TextBlock
+                var snapshotNoteBlock = new TextBlock
                 {
                     Text = "Note: An automated safety snapshot of your current database will be saved before restoring.",
                     FontSize = 12,
-                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
-                });
+                    Foreground = VedaBaseModern.UI.Services.CustomThemeService.GetThemeBrush("TextFillColorSecondaryBrush", dialog.RequestedTheme)
+                };
+                contentPanel.Children.Add(snapshotNoteBlock);
 
                 dialog.Content = contentPanel;
 
@@ -182,7 +184,7 @@ namespace VedaBaseModern.UI.Views
                 Text = "Sign in to synchronize your bookmarks, highlights, and notes across all your devices.",
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 13,
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+                Foreground = VedaBaseModern.UI.Services.CustomThemeService.GetThemeBrush("TextFillColorSecondaryBrush", dialog.RequestedTheme)
             };
             rootPanel.Children.Add(introText);
 
@@ -215,10 +217,10 @@ namespace VedaBaseModern.UI.Views
             // Error display inside dialog
             var dialogErrorText = new TextBlock
             {
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 12,
-                Visibility = Visibility.Collapsed
+                Visibility = Visibility.Collapsed,
+                Foreground = VedaBaseModern.UI.Services.CustomThemeService.GetThemeBrush("SystemFillColorCriticalBrush", dialog.RequestedTheme)
             };
             rootPanel.Children.Add(dialogErrorText);
 
@@ -230,13 +232,14 @@ namespace VedaBaseModern.UI.Views
                 IsExpanded = false
             };
             var customServerPanel = new StackPanel { Spacing = 8, Padding = new Thickness(0, 8, 0, 0) };
-            customServerPanel.Children.Add(new TextBlock
+            var customServerDesc = new TextBlock
             {
                 Text = "By default, Prabhupāda Connect uses the official cloud sync backend. Power users can optionally connect their self-hosted Supabase instance.",
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
-            });
+                Foreground = VedaBaseModern.UI.Services.CustomThemeService.GetThemeBrush("TextFillColorSecondaryBrush", dialog.RequestedTheme)
+            };
+            customServerPanel.Children.Add(customServerDesc);
             var urlBox = new TextBox
             {
                 Header = "Project URL",

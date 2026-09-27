@@ -33,6 +33,10 @@ namespace VedaBaseModern.UI.Services
             "CardBackgroundFillColorDefaultBrush",
             "CardBackgroundFillColorSecondaryBrush",
             "LayerFillColorDefaultBrush",
+            "ContentDialogBackground",
+            "ContentDialogTopOverlay",
+            "ContentDialogForeground",
+            "ContentDialogBorderBrush",
             "AccentFillColorDefaultBrush",
             "AccentFillColorSecondaryBrush",
             "AccentFillColorTertiaryBrush",
@@ -339,6 +343,10 @@ namespace VedaBaseModern.UI.Services
             ["CardBackgroundFillColorDefaultBrush"] = new SolidColorBrush(Color.FromArgb(255, 0x16, 0x38, 0x2A)),
             ["CardBackgroundFillColorSecondaryBrush"] = new SolidColorBrush(Color.FromArgb(255, 0x13, 0x30, 0x24)),
             ["LayerFillColorDefaultBrush"] = new SolidColorBrush(Color.FromArgb(255, 0x16, 0x38, 0x2A)),
+            ["ContentDialogBackground"] = new SolidColorBrush(Color.FromArgb(255, 0x16, 0x38, 0x2A)),
+            ["ContentDialogTopOverlay"] = new SolidColorBrush(Color.FromArgb(255, 0x16, 0x38, 0x2A)),
+            ["ContentDialogBorderBrush"] = new SolidColorBrush(Color.FromArgb(255, 0x23, 0x4D, 0x3C)),
+            ["ContentDialogForeground"] = new SolidColorBrush(Color.FromArgb(255, 0xF2, 0xF4, 0xF3)),
             ["AccentFillColorDefaultBrush"] = new SolidColorBrush(Color.FromArgb(255, 0xD4, 0xAF, 0x37)),
             ["AccentFillColorSecondaryBrush"] = new SolidColorBrush(Color.FromArgb(255, 0xC5, 0xA0, 0x59)),
             ["AccentFillColorTertiaryBrush"] = new SolidColorBrush(Color.FromArgb(255, 0xB0, 0x8D, 0x45)),
@@ -363,6 +371,10 @@ namespace VedaBaseModern.UI.Services
             ["CardBackgroundFillColorDefaultBrush"] = new SolidColorBrush(Color.FromArgb(255, 0xF7, 0xDC, 0xAF)),
             ["CardBackgroundFillColorSecondaryBrush"] = new SolidColorBrush(Color.FromArgb(255, 0xF5, 0xD8, 0xA9)),
             ["LayerFillColorDefaultBrush"] = new SolidColorBrush(Color.FromArgb(255, 0xF7, 0xDC, 0xAF)),
+            ["ContentDialogBackground"] = new SolidColorBrush(Color.FromArgb(255, 0xF7, 0xDC, 0xAF)),
+            ["ContentDialogTopOverlay"] = new SolidColorBrush(Color.FromArgb(255, 0xF7, 0xDC, 0xAF)),
+            ["ContentDialogBorderBrush"] = new SolidColorBrush(Color.FromArgb(255, 0xDF, 0xBD, 0x86)),
+            ["ContentDialogForeground"] = new SolidColorBrush(Color.FromArgb(255, 0x11, 0x11, 0x11)),
             ["AccentFillColorDefaultBrush"] = new SolidColorBrush(Color.FromArgb(255, 0x9B, 0x68, 0x18)),
             ["AccentFillColorSecondaryBrush"] = new SolidColorBrush(Color.FromArgb(255, 0x8C, 0x5A, 0x13)),
             ["AccentFillColorTertiaryBrush"] = new SolidColorBrush(Color.FromArgb(255, 0x7A, 0x4C, 0x0D)),
@@ -401,6 +413,10 @@ namespace VedaBaseModern.UI.Services
                 ["CardBackgroundFillColorDefaultBrush"] = new SolidColorBrush(cardBg),
                 ["CardBackgroundFillColorSecondaryBrush"] = new SolidColorBrush(cardBg),
                 ["LayerFillColorDefaultBrush"] = new SolidColorBrush(cardBg),
+                ["ContentDialogBackground"] = new SolidColorBrush(cardBg),
+                ["ContentDialogTopOverlay"] = new SolidColorBrush(cardBg),
+                ["ContentDialogForeground"] = new SolidColorBrush(primaryText),
+                ["ContentDialogBorderBrush"] = new SolidColorBrush(divider),
                 ["AccentFillColorDefaultBrush"] = new SolidColorBrush(accent),
                 ["AccentFillColorSecondaryBrush"] = new SolidColorBrush(accent),
                 ["AccentFillColorTertiaryBrush"] = new SolidColorBrush(accent),
@@ -591,6 +607,35 @@ namespace VedaBaseModern.UI.Services
         }
 
         /// <summary>
+        /// Resolves a theme brush matching the requested theme (Dark, Light, or active Custom theme).
+        /// </summary>
+        public static Brush GetThemeBrush(string key, ElementTheme theme)
+        {
+            if (ActiveCustomTheme != null)
+            {
+                var brushes = new CustomThemeService().BuildBrushDictionary(ActiveCustomTheme);
+                if (brushes.TryGetValue(key, out var b)) return b;
+            }
+
+            string themeKey = theme == ElementTheme.Light ? "Light" : "Dark";
+            if (Application.Current?.Resources?.ThemeDictionaries != null &&
+                Application.Current.Resources.ThemeDictionaries.TryGetValue(themeKey, out var dictObj) &&
+                dictObj is ResourceDictionary themeDict &&
+                themeDict.TryGetValue(key, out var res) && res is Brush brush)
+            {
+                return brush;
+            }
+
+            if (Application.Current?.Resources != null &&
+                Application.Current.Resources.TryGetValue(key, out var fallback) && fallback is Brush fallbackBrush)
+            {
+                return fallbackBrush;
+            }
+
+            return new SolidColorBrush(Windows.UI.Color.FromArgb(255, 128, 128, 128));
+        }
+
+        /// <summary>
         /// Synchronizes a ContentDialog's RequestedTheme, background, and brush resources
         /// with the application's active theme (Light, Dark, Sepia, Solarized, or Custom)
         /// so popups never appear mismatched against the app window.
@@ -599,37 +644,37 @@ namespace VedaBaseModern.UI.Services
         {
             if (dialog == null) return;
 
-            // 1. Establish XamlRoot and synchronize RequestedTheme from visual tree
+            // 1. Establish XamlRoot and determine effective theme from visual tree
             if (xamlRoot != null)
             {
                 dialog.XamlRoot = xamlRoot;
-                if (xamlRoot.Content is FrameworkElement fe)
-                {
-                    dialog.RequestedTheme = fe.ActualTheme;
-                }
             }
             else if (Application.Current is VedaBaseModern_UI.App app && app.MainWindowInstance?.Content is FrameworkElement rootFe)
             {
                 dialog.XamlRoot = rootFe.XamlRoot;
-                dialog.RequestedTheme = rootFe.ActualTheme;
             }
 
-            // 2. Resolve default theme brushes from application resources safely
-            if (Application.Current?.Resources != null)
+            ElementTheme effectiveTheme = ElementTheme.Default;
+            if (dialog.XamlRoot?.Content is FrameworkElement hostFe)
             {
-                if (Application.Current.Resources.TryGetValue("LayerFillColorDefaultBrush", out var bg) && bg is Brush bgBrush)
-                {
-                    dialog.Background = bgBrush;
-                }
-                if (Application.Current.Resources.TryGetValue("CardStrokeColorDefaultBrush", out var stroke) && stroke is Brush strokeBrush)
-                {
-                    dialog.BorderBrush = strokeBrush;
-                }
-                if (Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out var fg) && fg is Brush fgBrush)
-                {
-                    dialog.Foreground = fgBrush;
-                }
+                effectiveTheme = hostFe.ActualTheme;
             }
+            else if (Application.Current is VedaBaseModern_UI.App a && a.MainWindowInstance?.Content is FrameworkElement mFe)
+            {
+                effectiveTheme = mFe.ActualTheme;
+            }
+
+            if (effectiveTheme == ElementTheme.Default)
+            {
+                effectiveTheme = ElementTheme.Dark;
+            }
+
+            dialog.RequestedTheme = effectiveTheme;
+
+            // 2. Clear any hardcoded local overrides that break dynamic theming
+            dialog.ClearValue(Control.BackgroundProperty);
+            dialog.ClearValue(Control.BorderBrushProperty);
+            dialog.ClearValue(Control.ForegroundProperty);
 
             // 3. If a user custom theme is active, inject full brush overrides into the dialog's resource scope
             if (ActiveCustomTheme != null)
@@ -645,17 +690,51 @@ namespace VedaBaseModern.UI.Services
                     catch { }
                 }
 
-                if (brushes.TryGetValue("LayerFillColorDefaultBrush", out var customBg))
+                if (brushes.TryGetValue("CardBackgroundFillColorDefaultBrush", out var customCard))
                 {
-                    dialog.Background = customBg;
+                    dialog.Background = customCard;
+                    dialog.Resources["ContentDialogBackground"] = customCard;
+                    dialog.Resources["ContentDialogTopOverlay"] = customCard;
                 }
                 if (brushes.TryGetValue("CardStrokeColorDefaultBrush", out var customStroke))
                 {
                     dialog.BorderBrush = customStroke;
+                    dialog.Resources["ContentDialogBorderBrush"] = customStroke;
                 }
                 if (brushes.TryGetValue("TextFillColorPrimaryBrush", out var customFg))
                 {
                     dialog.Foreground = customFg;
+                    dialog.Resources["ContentDialogForeground"] = customFg;
+                }
+            }
+            else
+            {
+                // Standard Dark / Light mode: pull from the matching ThemeDictionary so dialog perfectly matches active window theme
+                string themeKey = effectiveTheme == ElementTheme.Light ? "Light" : "Dark";
+                if (Application.Current?.Resources?.ThemeDictionaries != null &&
+                    Application.Current.Resources.ThemeDictionaries.TryGetValue(themeKey, out var dictObj) &&
+                    dictObj is ResourceDictionary themeDict)
+                {
+                    if (themeDict.TryGetValue("CardBackgroundFillColorDefaultBrush", out var bg) && bg is Brush bgBrush)
+                    {
+                        dialog.Background = bgBrush;
+                        dialog.Resources["ContentDialogBackground"] = bgBrush;
+                        dialog.Resources["ContentDialogTopOverlay"] = bgBrush;
+                    }
+                    if (themeDict.TryGetValue("CardStrokeColorDefaultBrush", out var stroke) && stroke is Brush strokeBrush)
+                    {
+                        dialog.BorderBrush = strokeBrush;
+                        dialog.Resources["ContentDialogBorderBrush"] = strokeBrush;
+                    }
+                    if (themeDict.TryGetValue("TextFillColorPrimaryBrush", out var fg) && fg is Brush fgBrush)
+                    {
+                        dialog.Foreground = fgBrush;
+                        dialog.Resources["ContentDialogForeground"] = fgBrush;
+                    }
+                    if (themeDict.TryGetValue("TextFillColorSecondaryBrush", out var secFg) && secFg is Brush secBrush)
+                    {
+                        dialog.Resources["TextFillColorSecondaryBrush"] = secBrush;
+                    }
                 }
             }
         }
