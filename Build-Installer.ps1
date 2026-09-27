@@ -88,19 +88,20 @@ if (-not $isccPath -or -not (Test-Path $isccPath)) {
 }
 Write-Host "      Found Inno Setup at: $isccPath" -ForegroundColor Green
 
-# Step 4: Build Application in Release Mode
-Write-Host "[4/5] Building Prabhupada Connect in Release mode..." -ForegroundColor Yellow
+# Step 4: Publish Application in Self-Contained Release Mode
+Write-Host "[4/5] Publishing Prabhupada Connect in Self-Contained Release mode (embeds .NET runtime)..." -ForegroundColor Yellow
 
 # Kill running instances before building
 Get-Process -Name "VedaBaseModern2.UI" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 $projPath = "$PSScriptRoot\App\VedaBaseModern2.UI\VedaBaseModern2.UI.csproj"
-& dotnet build $projPath -c Release
+$publishDir = "$PSScriptRoot\App\VedaBaseModern2.UI\bin\Release\net10.0-windows10.0.26100.0\win-x64\publish"
+& dotnet publish $projPath -c Release -r win-x64 --self-contained true -o $publishDir
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "ERROR: Release build failed!"
+    Write-Error "ERROR: Self-contained Release publish failed!"
     exit 1
 }
-Write-Host "      Release build completed successfully." -ForegroundColor Green
+Write-Host "      Self-contained Release publish completed successfully." -ForegroundColor Green
 
 # Step 5: Compile Standalone Setup Executable
 Write-Host "[5/5] Compiling single bundle setup executable..." -ForegroundColor Yellow

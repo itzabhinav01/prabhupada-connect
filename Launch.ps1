@@ -2,10 +2,11 @@
 # Run this or double-click Launch.bat to start the app cleanly
 
 $rootExe = "$PSScriptRoot\VedaBaseModern2.UI.exe"
+$publishExe = "$PSScriptRoot\App\VedaBaseModern2.UI\bin\Release\net10.0-windows10.0.26100.0\win-x64\publish\VedaBaseModern2.UI.exe"
 $releaseExe = "$PSScriptRoot\App\VedaBaseModern2.UI\bin\Release\net10.0-windows10.0.26100.0\win-x64\VedaBaseModern2.UI.exe"
 $debugExe = "$PSScriptRoot\App\VedaBaseModern2.UI\bin\Debug\net10.0-windows10.0.26100.0\win-x64\VedaBaseModern2.UI.exe"
 
-$exePath = if (Test-Path $rootExe) { $rootExe } elseif (Test-Path $releaseExe) { $releaseExe } elseif (Test-Path $debugExe) { $debugExe } else { $null }
+$exePath = if (Test-Path $rootExe) { $rootExe } elseif (Test-Path $publishExe) { $publishExe } elseif (Test-Path $releaseExe) { $releaseExe } elseif (Test-Path $debugExe) { $debugExe } else { $null }
 
 # Step 1: Kill any previous instance of the app
 $prev = Get-Process -Name "VedaBaseModern2.UI" -ErrorAction SilentlyContinue

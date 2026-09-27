@@ -5,7 +5,7 @@
 #define MyAppVersion "2.0"
 #define MyAppPublisher "Bhaktivedanta Research Group"
 #define MyAppURL "https://github.com/itzabhinav01/prabhupada-connect"
-#define MyAppExeName "Launch.bat"
+#define MyAppExeName "VedaBaseModern2.UI.exe"
 
 [Setup]
 AppId={{9B78D8D3-64E2-4C1C-9E9A-A3E54A62C6E1}
@@ -37,10 +37,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; Release binaries (WinUI 3 + .NET 10)
-Source: "..\App\VedaBaseModern2.UI\bin\Release\net10.0-windows10.0.26100.0\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Standalone Self-Contained Release binaries (WinUI 3 + Embedded .NET Runtime)
+Source: "..\App\VedaBaseModern2.UI\bin\Release\net10.0-windows10.0.26100.0\win-x64\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Database corpus (267MB SQLite FTS5 database)
+; Database corpus (235MB SQLite FTS5 database)
 Source: "..\Database\prabhupada_corpus.db"; DestDir: "{app}\Database"; Flags: ignoreversion
 
 ; Launchers and shortcut scripts
@@ -55,4 +55,4 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Prabhupada Connect"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\Assets\AppIcon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: shellexec postinstall nowait skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: postinstall nowait skipifsilent
