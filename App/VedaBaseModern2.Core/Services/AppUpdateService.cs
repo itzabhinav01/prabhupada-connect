@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -226,59 +227,37 @@ namespace VedaBaseModern.Core.Services
                 Directory.CreateDirectory(stageDir);
                 ZipFile.ExtractToDirectory(zipPath, stageDir, overwriteFiles: true);
 
-                progress?.Report((95, "Restarting application to apply update..."));
+                progress?.Report((90, "Applying updated files..."));
 
-                // Create the update script that waits for current app to exit, copies files, and restarts
-                string cmdPath = Path.Combine(tempDir, "apply_update.cmd");
-                string scriptContent = $@"@echo off
-setlocal
-set ""TARGET={targetDirectory.TrimEnd('\\')}""
-set ""STAGE={stageDir.TrimEnd('\\')}""
-set ""EXE=VedaBaseModern2.UI.exe""
+                // Clean up any .old files from prior updates
+                CleanUpOldFiles(targetDirectory);
 
-:: Wait for app to completely terminate and release file locks
-timeout /t 1 /nobreak >nul
-:wait_process
-tasklist /fi ""imagename eq %EXE%"" 2>nul | findstr /i ""%EXE%"" >nul
-if not errorlevel 1 (
-    timeout /t 1 /nobreak >nul
-    goto wait_process
-)
+                // Apply files in-place using atomic rename pattern for locked running files
+                CopyDirectoryWithRename(stageDir, targetDirectory);
 
-:: Overwrite existing files with updated ones
-xcopy /y /e /q ""%STAGE%\*"" ""%TARGET%\"" >nul 2>&1
+                progress?.Report((98, "Restarting application..."));
 
-:: Restart application cleanly
-cd /d ""%TARGET%""
-start """" ""%TARGET%\%EXE%""
-
-:: Clean up staging directory
-timeout /t 2 /nobreak >nul
-rd /s /q ""%STAGE%"" >nul 2>&1
-exit
-";
-                await File.WriteAllTextAsync(cmdPath, scriptContent, cancellationToken);
-
-                // Launch batch updater in background (hidden window)
-                var psi = new System.Diagnostics.ProcessStartInfo
+                // Launch the updated application cleanly
+                string exePath = Path.Combine(targetDirectory, "VedaBaseModern2.UI.exe");
+                if (File.Exists(exePath))
                 {
-                    FileName = "cmd.exe",
-                    Arguments = $"/c \"\"{cmdPath}\"\"",
-                    UseShellExecute = true,
-                    CreateNoWindow = true,
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
-                    WorkingDirectory = tempDir
-                };
-                System.Diagnostics.Process.Start(psi);
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = exePath,
+                        WorkingDirectory = targetDirectory,
+                        UseShellExecute = true
+                    };
+                    Process.Start(psi);
+                }
 
-                // Exit current process so the updater script can immediately overwrite files
+                // Exit current process cleanly
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(300);
+                    await Task.Delay(400);
                     Environment.Exit(0);
                 });
 
-                return (true, "Update applied. Restarting...");
+                return (true, "Update applied successfully. Restarting...");
             }
             catch (OperationCanceledException)
             {
@@ -288,6 +267,54 @@ exit
             {
                 return (false, $"Failed to apply update: {ex.Message}");
             }
+        }
+
+        private static void CopyDirectoryWithRename(string sourceDir, string targetDir)
+        {
+            var dir = new DirectoryInfo(sourceDir);
+            if (!dir.Exists) return;
+
+            Directory.CreateDirectory(targetDir);
+
+            foreach (var file in dir.GetFiles("*", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(sourceDir, file.FullName);
+                string destFile = Path.Combine(targetDir, relativePath);
+                string? destDir = Path.GetDirectoryName(destFile);
+                if (!string.IsNullOrEmpty(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+
+                try
+                {
+                    file.CopyTo(destFile, overwrite: true);
+                }
+                catch (IOException)
+                {
+                    // File is locked by the currently running process.
+                    // Windows allows renaming open/running files. Rename to .old and copy the fresh version.
+                    string oldFile = destFile + ".old";
+                    try { if (File.Exists(oldFile)) File.Delete(oldFile); } catch { }
+                    try { File.Move(destFile, oldFile); } catch { }
+                    file.CopyTo(destFile, overwrite: true);
+                }
+            }
+        }
+
+        public static void CleanUpOldFiles(string targetDir)
+        {
+            try
+            {
+                var dir = new DirectoryInfo(targetDir);
+                if (!dir.Exists) return;
+
+                foreach (var file in dir.GetFiles("*.old", SearchOption.AllDirectories))
+                {
+                    try { file.Delete(); } catch { }
+                }
+            }
+            catch { }
         }
 
         public static bool CompareVersions(string remoteVersionStr, string currentVersionStr)

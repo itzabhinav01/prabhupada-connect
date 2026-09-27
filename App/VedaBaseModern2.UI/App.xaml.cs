@@ -76,6 +76,7 @@ public partial class App : Application
 
         // Auto-discover Database directory relative to execution location or fallback
         string baseDir = AppContext.BaseDirectory;
+        AppUpdateService.CleanUpOldFiles(baseDir);
         string? dbDir = null;
         var current = new DirectoryInfo(baseDir);
         while (current != null)
