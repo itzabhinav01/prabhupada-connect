@@ -68,7 +68,7 @@ namespace VedaBaseModern.UI.ViewModels
         [ObservableProperty] private string _latestVersionDisplay = string.Empty;
         [ObservableProperty] private string _updateReleaseNotes = string.Empty;
         [ObservableProperty] private string _updateDownloadUrl = string.Empty;
-        [ObservableProperty] private string _currentAppVersion = "2.0.2";
+        [ObservableProperty] private string _currentAppVersion = "2.0.3";
         public string DisplayAppVersion => $"v{CurrentAppVersion}";
         [ObservableProperty] private bool _isPatchAvailable;
         [ObservableProperty] private string _patchDownloadUrl = string.Empty;

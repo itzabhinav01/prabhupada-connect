@@ -1029,7 +1029,7 @@
                                                  NavigateUri="mailto:abhinavsona01@gmail.com"
                                                  Padding="0" />
                                 <TextBlock Text="•" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="Abhinav Sharma"
+                                <TextBlock Text="Abhinav"
                                            FontSize="12" FontStyle="Italic"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             </StackPanel>
