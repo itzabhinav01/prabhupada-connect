@@ -108,6 +108,146 @@ namespace VedaBaseModern.Core.Services
             }
         }
 
+        public async Task<SyncAuthResult> SignUpAsync(string email, string password)
+        {
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+            {
+                return new SyncAuthResult { Success = false, Message = "Email and password are required." };
+            }
+
+            if (password.Length < 6)
+            {
+                return new SyncAuthResult { Success = false, Message = "Password must be at least 6 characters long." };
+            }
+
+            try
+            {
+                var authBody = new
+                {
+                    email = email.Trim(),
+                    password = password
+                };
+                string json = JsonSerializer.Serialize(authBody);
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"{_authUrl}/signup");
+                req.Headers.Add("apikey", _config.AnonKey);
+                req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                using var resp = await _httpClient.SendAsync(req);
+                string respJson = await resp.Content.ReadAsStringAsync();
+
+                if (resp.IsSuccessStatusCode)
+                {
+                    var authResp = JsonSerializer.Deserialize<SupabaseAuthResponseDto>(respJson, JsonOptions);
+                    string? token = authResp?.AccessToken;
+                    string? userId = authResp?.User?.Id;
+
+                    if (!string.IsNullOrEmpty(token))
+                    {
+                        _authToken = token;
+                        _config.AuthToken = token;
+                        _userId = userId;
+                        _config.UserId = userId;
+                        _config.UserEmail = email.Trim();
+                        _config.UserPassword = password;
+
+                        return new SyncAuthResult
+                        {
+                            Success = true,
+                            Message = "Account created and logged in successfully!",
+                            UserId = userId,
+                            Email = email.Trim(),
+                            AccessToken = token,
+                            RequiresEmailConfirmation = false
+                        };
+                    }
+                    else
+                    {
+                        return new SyncAuthResult
+                        {
+                            Success = true,
+                            Message = "Account created! If email confirmation is enabled on your Supabase project, please check your inbox to confirm before signing in.",
+                            UserId = userId,
+                            Email = email.Trim(),
+                            RequiresEmailConfirmation = true
+                        };
+                    }
+                }
+                else
+                {
+                    string errorMsg = ParseAuthErrorMessage(respJson, resp.StatusCode);
+                    return new SyncAuthResult { Success = false, Message = errorMsg };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new SyncAuthResult { Success = false, Message = $"Sign up failed: {ex.Message}" };
+            }
+        }
+
+        public async Task<SyncAuthResult> SendPasswordResetEmailAsync(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return new SyncAuthResult { Success = false, Message = "Email address is required." };
+            }
+
+            try
+            {
+                var body = new { email = email.Trim() };
+                string json = JsonSerializer.Serialize(body);
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"{_authUrl}/recover");
+                req.Headers.Add("apikey", _config.AnonKey);
+                req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                using var resp = await _httpClient.SendAsync(req);
+                if (resp.IsSuccessStatusCode)
+                {
+                    return new SyncAuthResult
+                    {
+                        Success = true,
+                        Message = $"Password reset instructions have been sent to {email.Trim()}. Please check your email."
+                    };
+                }
+                else
+                {
+                    string respJson = await resp.Content.ReadAsStringAsync();
+                    string errorMsg = ParseAuthErrorMessage(respJson, resp.StatusCode);
+                    return new SyncAuthResult { Success = false, Message = errorMsg };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new SyncAuthResult { Success = false, Message = $"Password reset request failed: {ex.Message}" };
+            }
+        }
+
+        private static string ParseAuthErrorMessage(string json, System.Net.HttpStatusCode statusCode)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("msg", out var msgProp) && !string.IsNullOrWhiteSpace(msgProp.GetString()))
+                    return msgProp.GetString()!;
+                if (root.TryGetProperty("error_description", out var descProp) && !string.IsNullOrWhiteSpace(descProp.GetString()))
+                    return descProp.GetString()!;
+                if (root.TryGetProperty("message", out var mProp) && !string.IsNullOrWhiteSpace(mProp.GetString()))
+                    return mProp.GetString()!;
+                if (root.TryGetProperty("error", out var errProp) && !string.IsNullOrWhiteSpace(errProp.GetString()))
+                    return errProp.GetString()!;
+            }
+            catch { }
+
+            return statusCode switch
+            {
+                System.Net.HttpStatusCode.BadRequest => "Invalid request. Please check your credentials.",
+                System.Net.HttpStatusCode.Unauthorized => "Invalid email or password.",
+                System.Net.HttpStatusCode.NotFound => "Authentication endpoint not found.",
+                System.Net.HttpStatusCode.TooManyRequests => "Too many attempts. Please try again later.",
+                _ => $"Request failed (HTTP {(int)statusCode})."
+            };
+        }
+
         public async Task<SyncConnectionTestResult> TestConnectionAsync()
         {
             if (string.IsNullOrWhiteSpace(_config.ProjectUrl) || string.IsNullOrWhiteSpace(_config.AnonKey))

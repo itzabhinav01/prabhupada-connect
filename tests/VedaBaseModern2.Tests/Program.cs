@@ -94,8 +94,20 @@ class Program
             await TestBtgSvaTmgAndBookFiltersAsync(corpusDb);
 
             // 14. Highlighting Colours Nomenclature, Customization & Backup Persistence Tests
-            Console.WriteLine("\n[14/14] Testing Highlighting Colours Nomenclature, Customization & Backup...");
+            Console.WriteLine("\n[14/15] Testing Highlighting Colours Nomenclature, Customization & Backup...");
             await TestHighlightColourNomenclatureAndPaletteAsync(testUserDb);
+
+            // 15. Anonymous Telemetry & Supabase Heartbeat Ping Service Tests
+            Console.WriteLine("\n[15/17] Testing Anonymous Telemetry & Supabase Heartbeat Ping Service...");
+            await TestTelemetryPingServiceAsync(testUserDb);
+
+            // 16. App Update Service & Semantic Version Comparison Tests
+            Console.WriteLine("\n[16/17] Testing App Update Checker & Version Comparison...");
+            await TestAppUpdateServiceAsync();
+
+            // 17. Supabase Auth Flows (Sign Up, Sign In, Password Reset) Tests
+            Console.WriteLine("\n[17/17] Testing Supabase Auth Flows (Sign Up, Sign In, Forgot Password)...");
+            await TestAuthMethodsAsync(testUserDb);
         }
         finally
         {
@@ -992,5 +1004,111 @@ Further check [[CC Adi 1.1]] for invocations.";
         {
             if (File.Exists(backupFile)) { try { File.Delete(backupFile); } catch { } }
         }
+    }
+
+    private static async Task TestTelemetryPingServiceAsync(string testUserDb)
+    {
+        var userRepo = new SqliteUserRepository(testUserDb);
+        await userRepo.InitializeAsync();
+
+        // 1. Device ID Generation & Persistence
+        string deviceId1 = await userRepo.GetDeviceIdAsync();
+        Assert(!string.IsNullOrWhiteSpace(deviceId1) && Guid.TryParse(deviceId1, out _), "DeviceId is a valid persistent GUID", deviceId1);
+        string deviceId2 = await userRepo.GetDeviceIdAsync();
+        Assert(deviceId1 == deviceId2, "DeviceId is idempotent and stable across calls");
+
+        // 2. Telemetry Ping with Placeholder Credentials cleanly no-ops
+        string origUrl = TelemetryConfig.SupabaseUrl;
+        string origKey = TelemetryConfig.SupabaseAnonKey;
+        try
+        {
+            TelemetryConfig.SupabaseUrl = "https://YOUR_PROJECT_ID.supabase.co";
+            TelemetryConfig.SupabaseAnonKey = "YOUR_SUPABASE_ANON_KEY";
+            var pingService = new AppPingService(userRepo);
+            bool result = await pingService.SendHeartbeatPingAsync();
+            Assert(result == false, "PingService gracefully returns false when credentials are placeholder values");
+        }
+        finally
+        {
+            TelemetryConfig.SupabaseUrl = origUrl;
+            TelemetryConfig.SupabaseAnonKey = origKey;
+        }
+
+        // 3. Telemetry Rate Limiting Check
+        var livePingService = new AppPingService(userRepo);
+        await userRepo.SetSyncMetadataAsync("LastTelemetryPingUtc", DateTime.UtcNow.ToString("O"));
+        string? storedPing = await userRepo.GetSyncMetadataAsync("LastTelemetryPingUtc");
+        Assert(!string.IsNullOrEmpty(storedPing), "LastTelemetryPingUtc successfully stored in SyncMetadata");
+        bool throttledResult = await livePingService.SendHeartbeatPingAsync();
+        Assert(throttledResult == false, "PingService strictly obeys 24-hour rate limit when recently pinged");
+    }
+
+    private static async Task TestAppUpdateServiceAsync()
+    {
+        // 1. Version Comparison Logic Tests
+        Assert(AppUpdateService.CompareVersions("2.1.0", "2.0.0") == true, "2.1.0 is recognized as newer than 2.0.0");
+        Assert(AppUpdateService.CompareVersions("v2.1.0", "2.0.0") == true, "v2.1.0 prefix is handled and recognized as newer");
+        Assert(AppUpdateService.CompareVersions("2.0.0", "2.0.0") == false, "2.0.0 is recognized as identical to 2.0.0");
+        Assert(AppUpdateService.CompareVersions("v2.0.0", "2.0.0") == false, "v2.0.0 is recognized as identical to 2.0.0");
+        Assert(AppUpdateService.CompareVersions("1.9.9", "2.0.0") == false, "1.9.9 is recognized as older than 2.0.0");
+        Assert(AppUpdateService.CompareVersions("2.0.1", "2.0.0") == true, "Patch release 2.0.1 is recognized as newer");
+        Assert(AppUpdateService.CompareVersions("2.10.0", "2.9.0") == true, "Multi-digit minor 2.10.0 > 2.9.0");
+        Assert(AppUpdateService.CompareVersions("3.0.0-preview", "2.0.0") == true, "Major prerelease 3.0.0-preview > 2.0.0");
+        Assert(AppUpdateService.CompareVersions("", "2.0.0") == false, "Empty remote version safely returns false");
+
+        // 2. Service Invocation with override
+        var updateService = new AppUpdateService();
+        var info = await updateService.CheckForUpdatesAsync("2.0.0");
+        Assert(info != null, "AppUpdateService returns valid AppUpdateInfo instance");
+        Assert(info?.CurrentVersion == "2.0.0", "AppUpdateInfo preserves current app version", info?.CurrentVersion);
+        Assert(!string.IsNullOrEmpty(info?.ReleaseUrl), "ReleaseUrl is never empty");
+        Assert(!string.IsNullOrEmpty(info?.StatusMessage), "StatusMessage is populated");
+    }
+
+    private static async Task TestAuthMethodsAsync(string testUserDb)
+    {
+        var userRepo = new SqliteUserRepository(testUserDb);
+        await userRepo.InitializeAsync();
+        var backupService = new ResearchDataBackupService(userRepo, new SqliteSettingsService(testUserDb), testUserDb);
+        var creds = new InMemoryCredentialStorageService();
+        var syncService = new ResearchSyncService(userRepo, backupService, creds);
+
+        // 1. Password validation (< 6 chars)
+        var shortPassResult = await syncService.SignUpAsync("devotee@example.com", "123");
+        Assert(shortPassResult.Success == false, "Sign up rejects password shorter than 6 characters");
+
+        // 2. Placeholder credentials check
+        string origUrl = TelemetryConfig.SupabaseUrl;
+        string origKey = TelemetryConfig.SupabaseAnonKey;
+        try
+        {
+            TelemetryConfig.SupabaseUrl = "https://YOUR_PROJECT_ID.supabase.co";
+            TelemetryConfig.SupabaseAnonKey = "YOUR_SUPABASE_ANON_KEY";
+
+            var unconfiguredResult = await syncService.SignInAsync("devotee@example.com", "validPassword123");
+            Assert(unconfiguredResult.Success == false && unconfiguredResult.Message.Contains("not yet configured"),
+                "Sign in returns informative error when cloud sync server is unconfigured");
+
+            var unconfiguredReset = await syncService.SendPasswordResetEmailAsync("devotee@example.com");
+            Assert(unconfiguredReset.Success == false && unconfiguredReset.Message.Contains("not yet configured"),
+                "Password reset returns informative error when cloud sync server is unconfigured");
+        }
+        finally
+        {
+            TelemetryConfig.SupabaseUrl = origUrl;
+            TelemetryConfig.SupabaseAnonKey = origKey;
+        }
+
+        // 3. Custom server with invalid credentials
+        var customResult = await syncService.SignInAsync("devotee@example.com", "validPassword123", "https://invalid-subdomain-12345.supabase.co", "eyJhbGciOi...");
+        Assert(customResult.Success == false, "Sign in against unreachable/invalid custom server fails gracefully");
+    }
+
+    private class InMemoryCredentialStorageService : ICredentialStorageService
+    {
+        private readonly Dictionary<string, string> _dict = new();
+        public Task SaveCredentialsAsync(string key, string secret) { _dict[key] = secret; return Task.CompletedTask; }
+        public Task<string?> GetCredentialsAsync(string key) { _dict.TryGetValue(key, out var val); return Task.FromResult<string?>(val); }
+        public Task DeleteCredentialsAsync(string key) { _dict.Remove(key); return Task.CompletedTask; }
     }
 }

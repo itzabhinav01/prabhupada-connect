@@ -342,6 +342,109 @@ namespace VedaBaseModern.Core.Services
             return testResult;
         }
 
+        public async Task<SyncAuthResult> SignUpAsync(string email, string password, string? customUrl = null, string? customAnonKey = null)
+        {
+            string url = !string.IsNullOrWhiteSpace(customUrl) ? customUrl.Trim() : (TelemetryConfig.SupabaseUrl?.Trim() ?? string.Empty);
+            string key = !string.IsNullOrWhiteSpace(customAnonKey) ? customAnonKey.Trim() : (TelemetryConfig.SupabaseAnonKey?.Trim() ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key) ||
+                url.Contains("YOUR_PROJECT_ID", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("YOUR_SUPABASE_ANON_KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                return new SyncAuthResult
+                {
+                    Success = false,
+                    Message = "Cloud sync backend is not yet configured. Please enter a custom Supabase server or contact support."
+                };
+            }
+
+            string deviceId = await _userRepository.GetDeviceIdAsync();
+            var config = new SupabaseConfig
+            {
+                ProjectUrl = url,
+                AnonKey = key,
+                UserEmail = email,
+                UserPassword = password
+            };
+
+            var provider = new SupabaseSyncProvider(_httpClient, config, deviceId);
+            var authResult = await provider.SignUpAsync(email, password);
+
+            if (authResult.Success && !authResult.RequiresEmailConfirmation)
+            {
+                var configResult = await ConfigureSupabaseAsync(url, key, email, password);
+                if (!configResult.Success)
+                {
+                    authResult.Message += $" (Warning: {configResult.ErrorMessage})";
+                }
+            }
+
+            return authResult;
+        }
+
+        public async Task<SyncAuthResult> SignInAsync(string email, string password, string? customUrl = null, string? customAnonKey = null)
+        {
+            string url = !string.IsNullOrWhiteSpace(customUrl) ? customUrl.Trim() : (TelemetryConfig.SupabaseUrl?.Trim() ?? string.Empty);
+            string key = !string.IsNullOrWhiteSpace(customAnonKey) ? customAnonKey.Trim() : (TelemetryConfig.SupabaseAnonKey?.Trim() ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key) ||
+                url.Contains("YOUR_PROJECT_ID", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("YOUR_SUPABASE_ANON_KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                return new SyncAuthResult
+                {
+                    Success = false,
+                    Message = "Cloud sync backend is not yet configured. Please enter a custom Supabase server or contact support."
+                };
+            }
+
+            var configResult = await ConfigureSupabaseAsync(url, key, email, password);
+            if (configResult.Success)
+            {
+                return new SyncAuthResult
+                {
+                    Success = true,
+                    Message = "Signed in and connected to cloud sync!",
+                    Email = email
+                };
+            }
+            else
+            {
+                return new SyncAuthResult
+                {
+                    Success = false,
+                    Message = configResult.ErrorMessage ?? "Sign in failed. Please check your email and password."
+                };
+            }
+        }
+
+        public async Task<SyncAuthResult> SendPasswordResetEmailAsync(string email, string? customUrl = null, string? customAnonKey = null)
+        {
+            string url = !string.IsNullOrWhiteSpace(customUrl) ? customUrl.Trim() : (TelemetryConfig.SupabaseUrl?.Trim() ?? string.Empty);
+            string key = !string.IsNullOrWhiteSpace(customAnonKey) ? customAnonKey.Trim() : (TelemetryConfig.SupabaseAnonKey?.Trim() ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key) ||
+                url.Contains("YOUR_PROJECT_ID", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("YOUR_SUPABASE_ANON_KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                return new SyncAuthResult
+                {
+                    Success = false,
+                    Message = "Cloud sync backend is not yet configured. Please enter a custom Supabase server or contact support."
+                };
+            }
+
+            string deviceId = await _userRepository.GetDeviceIdAsync();
+            var config = new SupabaseConfig
+            {
+                ProjectUrl = url,
+                AnonKey = key
+            };
+
+            var provider = new SupabaseSyncProvider(_httpClient, config, deviceId);
+            return await provider.SendPasswordResetEmailAsync(email);
+        }
+
         public async Task SetSyncIntervalAsync(int intervalMinutes)
         {
             _syncIntervalMinutes = intervalMinutes;

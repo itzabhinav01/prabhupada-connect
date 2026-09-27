@@ -49,5 +49,15 @@ namespace VedaBaseModern.Core.Services
         /// see ResearchSyncService's single-retry-on-401 recovery.
         /// </summary>
         Task<bool> AuthenticateAsync();
+
+        /// <summary>
+        /// Registers a new user account with the remote provider.
+        /// </summary>
+        Task<SyncAuthResult> SignUpAsync(string email, string password);
+
+        /// <summary>
+        /// Requests a password reset / recovery email for the specified address.
+        /// </summary>
+        Task<SyncAuthResult> SendPasswordResetEmailAsync(string email);
     }
 }

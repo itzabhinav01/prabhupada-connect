@@ -29,6 +29,7 @@ namespace VedaBaseModern.UI.ViewModels
         private readonly ISettingsService _settingsService;
         private readonly IResearchDataBackupService _backupService;
         private readonly IResearchSyncService _syncService;
+        private readonly IAppUpdateService _updateService;
         private readonly Action<Microsoft.UI.Xaml.ElementTheme> _applyThemeLive;
 
         // Set while LoadAsync/Reset are populating the bound properties from
@@ -59,6 +60,15 @@ namespace VedaBaseModern.UI.ViewModels
         [ObservableProperty] private string _lastBackupDisplay = "No local backups yet";
         [ObservableProperty] private string _backupLocationDisplay = string.Empty;
         [ObservableProperty] private string _diagnosticsStatusMessage = string.Empty;
+
+        // Updates
+        [ObservableProperty] private bool _isCheckingForUpdates;
+        [ObservableProperty] private bool _isUpdateAvailable;
+        [ObservableProperty] private string _updateStatusMessage = string.Empty;
+        [ObservableProperty] private string _latestVersionDisplay = string.Empty;
+        [ObservableProperty] private string _updateReleaseNotes = string.Empty;
+        [ObservableProperty] private string _updateDownloadUrl = string.Empty;
+        [ObservableProperty] private string _currentAppVersion = "2.0.0";
 
         [ObservableProperty] private int _themeIndex;
         [ObservableProperty] public partial bool IsCustomThemeSelected { get; set; }
@@ -99,12 +109,14 @@ namespace VedaBaseModern.UI.ViewModels
             ISettingsService settingsService,
             Action<Microsoft.UI.Xaml.ElementTheme> applyThemeLive,
             IResearchDataBackupService? backupService = null,
-            IResearchSyncService? syncService = null)
+            IResearchSyncService? syncService = null,
+            IAppUpdateService? updateService = null)
         {
             _settingsService = settingsService;
             _applyThemeLive = applyThemeLive;
-            _backupService = backupService ?? VedaBaseModern_UI.App.Current.BackupService;
-            _syncService = syncService ?? VedaBaseModern_UI.App.Current.SyncService;
+            _backupService = backupService ?? VedaBaseModern_UI.App.Current?.BackupService!;
+            _syncService = syncService ?? VedaBaseModern_UI.App.Current?.SyncService!;
+            _updateService = updateService ?? VedaBaseModern_UI.App.Current?.UpdateService ?? new AppUpdateService();
         }
 
         public async Task LoadAsync()
@@ -855,6 +867,114 @@ namespace VedaBaseModern.UI.ViewModels
             finally
             {
                 IsSyncing = false;
+            }
+        }
+
+        public async Task<SyncAuthResult> SignUpAsync(string email, string password, string? customUrl = null, string? customAnonKey = null)
+        {
+            CloudSyncStatusMessage = string.Empty;
+            CloudSyncErrorMessage = string.Empty;
+            IsSyncing = true;
+            try
+            {
+                var result = await _syncService.SignUpAsync(email, password, customUrl, customAnonKey);
+                if (result.Success)
+                {
+                    CloudSyncStatusMessage = result.Message;
+                    await RefreshSyncStatusAsync();
+                }
+                else
+                {
+                    CloudSyncErrorMessage = result.Message;
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                CloudSyncErrorMessage = $"Sign up failed: {ex.Message}";
+                return new SyncAuthResult { Success = false, Message = ex.Message };
+            }
+            finally
+            {
+                IsSyncing = false;
+            }
+        }
+
+        public async Task<SyncAuthResult> SignInAsync(string email, string password, string? customUrl = null, string? customAnonKey = null)
+        {
+            CloudSyncStatusMessage = string.Empty;
+            CloudSyncErrorMessage = string.Empty;
+            IsSyncing = true;
+            try
+            {
+                var result = await _syncService.SignInAsync(email, password, customUrl, customAnonKey);
+                if (result.Success)
+                {
+                    CloudSyncStatusMessage = result.Message;
+                    await RefreshSyncStatusAsync();
+                }
+                else
+                {
+                    CloudSyncErrorMessage = result.Message;
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                CloudSyncErrorMessage = $"Sign in failed: {ex.Message}";
+                return new SyncAuthResult { Success = false, Message = ex.Message };
+            }
+            finally
+            {
+                IsSyncing = false;
+            }
+        }
+
+        public async Task<SyncAuthResult> SendPasswordResetEmailAsync(string email, string? customUrl = null, string? customAnonKey = null)
+        {
+            CloudSyncStatusMessage = string.Empty;
+            CloudSyncErrorMessage = string.Empty;
+            try
+            {
+                var result = await _syncService.SendPasswordResetEmailAsync(email, customUrl, customAnonKey);
+                if (result.Success)
+                {
+                    CloudSyncStatusMessage = result.Message;
+                }
+                else
+                {
+                    CloudSyncErrorMessage = result.Message;
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                CloudSyncErrorMessage = $"Failed to request password reset: {ex.Message}";
+                return new SyncAuthResult { Success = false, Message = ex.Message };
+            }
+        }
+
+        public async Task CheckForUpdatesAsync()
+        {
+            IsCheckingForUpdates = true;
+            UpdateStatusMessage = "Checking GitHub for updates...";
+            try
+            {
+                var info = await _updateService.CheckForUpdatesAsync(CurrentAppVersion);
+                IsUpdateAvailable = info.IsUpdateAvailable;
+                LatestVersionDisplay = info.LatestVersion;
+                UpdateReleaseNotes = info.ReleaseNotes;
+                UpdateDownloadUrl = info.DownloadUrl ?? info.ReleaseUrl;
+                UpdateStatusMessage = info.StatusMessage;
+            }
+            catch (Exception ex)
+            {
+                IsUpdateAvailable = false;
+                UpdateStatusMessage = $"Update check failed: {ex.Message}";
+            }
+            finally
+            {
+                IsCheckingForUpdates = false;
             }
         }
 

@@ -235,6 +235,19 @@ namespace VedaBaseModern.Core.Models
     }
 
     /// <summary>
+    /// Result returned by authentication operations (Sign Up, Sign In, Password Reset).
+    /// </summary>
+    public class SyncAuthResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string? UserId { get; set; }
+        public string? Email { get; set; }
+        public string? AccessToken { get; set; }
+        public bool RequiresEmailConfirmation { get; set; }
+    }
+
+    /// <summary>
     /// DTO for Supabase Auth token response.
     /// </summary>
     public class SupabaseAuthResponseDto

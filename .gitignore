@@ -36,6 +36,8 @@ ARM64/
 # Runtime User Data & Temporary Backups
 user.db
 *.vdbbackup
+*.bak
+Database/Backups/
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm

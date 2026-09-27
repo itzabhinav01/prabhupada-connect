@@ -155,91 +155,221 @@ namespace VedaBaseModern.UI.Views
             var dialog = new ContentDialog
             {
                 XamlRoot = this.XamlRoot,
-                Title = "Connect Supabase Project",
-                PrimaryButtonText = "Connect",
+                Title = "Cloud Sync Account",
+                PrimaryButtonText = "Sign In",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Primary
             };
             VedaBaseModern.UI.Services.CustomThemeService.SyncDialogTheme(dialog, this.XamlRoot);
 
-            var panel = new StackPanel { Spacing = 12 };
-            panel.Children.Add(new TextBlock
+            var rootPanel = new StackPanel { Spacing = 14, MaxWidth = 440 };
+
+            // Segmented mode switcher
+            var modeSelector = new RadioButtons
             {
-                Text = "Enter your personal Supabase project details. Cloud sync connects directly to your database with no central servers.",
+                Header = "Account Action",
+                SelectedIndex = 0,
+                MaxColumns = 3
+            };
+            modeSelector.Items.Add("Sign In");
+            modeSelector.Items.Add("Create Account");
+            modeSelector.Items.Add("Forgot Password");
+            rootPanel.Children.Add(modeSelector);
+
+            // Intro text
+            var introText = new TextBlock
+            {
+                Text = "Sign in to synchronize your bookmarks, highlights, and notes across all your devices.",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 13,
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+            };
+            rootPanel.Children.Add(introText);
+
+            // Input Fields
+            var emailBox = new TextBox
+            {
+                Header = "Email Address",
+                PlaceholderText = "devotee@example.com",
+                Text = !string.IsNullOrWhiteSpace(ViewModel.UserEmailDisplay) && ViewModel.UserEmailDisplay.Contains('@')
+                    ? ViewModel.UserEmailDisplay
+                    : string.Empty
+            };
+            rootPanel.Children.Add(emailBox);
+
+            var passBox = new PasswordBox
+            {
+                Header = "Password",
+                PlaceholderText = "Enter your password"
+            };
+            rootPanel.Children.Add(passBox);
+
+            var confirmPassBox = new PasswordBox
+            {
+                Header = "Confirm Password",
+                PlaceholderText = "Re-enter your password",
+                Visibility = Visibility.Collapsed
+            };
+            rootPanel.Children.Add(confirmPassBox);
+
+            // Error display inside dialog
+            var dialogErrorText = new TextBlock
+            {
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Visibility = Visibility.Collapsed
+            };
+            rootPanel.Children.Add(dialogErrorText);
+
+            // Advanced Expander for custom self-hosted Supabase server
+            var customServerExpander = new Expander
+            {
+                Header = "Advanced: Custom Server",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                IsExpanded = false
+            };
+            var customServerPanel = new StackPanel { Spacing = 8, Padding = new Thickness(0, 8, 0, 0) };
+            customServerPanel.Children.Add(new TextBlock
+            {
+                Text = "By default, Prabhupāda Connect uses the official cloud sync backend. Power users can optionally connect their self-hosted Supabase instance.",
+                FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
             });
-
             var urlBox = new TextBox
             {
                 Header = "Project URL",
                 PlaceholderText = "https://your-project.supabase.co",
                 Text = ViewModel.SupabaseProjectUrlDisplay ?? string.Empty
             };
-            panel.Children.Add(urlBox);
-
+            customServerPanel.Children.Add(urlBox);
             var keyBox = new PasswordBox
             {
                 Header = "Anon / Public Key",
                 PlaceholderText = "eyJhbGciOiJIUzI1NiIsInR..."
             };
-            panel.Children.Add(keyBox);
+            customServerPanel.Children.Add(keyBox);
+            customServerExpander.Content = customServerPanel;
+            rootPanel.Children.Add(customServerExpander);
 
-            var emailBox = new TextBox
+            // Handle mode selection change
+            modeSelector.SelectionChanged += (s, args) =>
             {
-                Header = "Account Email (Optional)",
-                PlaceholderText = "you@example.com (for Row Level Security user isolation)"
-            };
-            panel.Children.Add(emailBox);
+                dialogErrorText.Visibility = Visibility.Collapsed;
+                dialogErrorText.Text = string.Empty;
 
-            var passBox = new PasswordBox
-            {
-                Header = "Account Password (Optional)",
-                PlaceholderText = "Password for your Supabase user account"
-            };
-            panel.Children.Add(passBox);
-
-            var warningText = new TextBlock
-            {
-                Text = "Never enter the service_role secret key. Only the public anon key and your optional user credentials are used.",
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
-            };
-            panel.Children.Add(warningText);
-
-            dialog.Content = panel;
-
-            var result = await dialog.ShowAsync();
-            if (result == ContentDialogResult.Primary)
-            {
-                string url = urlBox.Text.Trim();
-                string key = keyBox.Password.Trim();
-                string? email = string.IsNullOrWhiteSpace(emailBox.Text) ? null : emailBox.Text.Trim();
-                string? pass = string.IsNullOrWhiteSpace(passBox.Password) ? null : passBox.Password;
-
-                if (!string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(key))
+                switch (modeSelector.SelectedIndex)
                 {
-                    bool wouldSwitch = await ViewModel.WouldSwitchProjectAsync(url, email);
-                    if (wouldSwitch)
+                    case 0: // Sign In
+                        dialog.PrimaryButtonText = "Sign In";
+                        introText.Text = "Sign in to synchronize your bookmarks, highlights, and notes across all your devices.";
+                        passBox.Visibility = Visibility.Visible;
+                        confirmPassBox.Visibility = Visibility.Collapsed;
+                        break;
+                    case 1: // Create Account
+                        dialog.PrimaryButtonText = "Create Account";
+                        introText.Text = "Create a free account to back up and sync your research annotations across devices.";
+                        passBox.Visibility = Visibility.Visible;
+                        confirmPassBox.Visibility = Visibility.Visible;
+                        break;
+                    case 2: // Forgot Password
+                        dialog.PrimaryButtonText = "Send Reset Link";
+                        introText.Text = "Enter your registered email address and we'll send you a link to reset your password.";
+                        passBox.Visibility = Visibility.Collapsed;
+                        confirmPassBox.Visibility = Visibility.Collapsed;
+                        break;
+                }
+            };
+
+            dialog.Content = rootPanel;
+
+            // Handle primary button click with validation and async execution
+            dialog.PrimaryButtonClick += async (d, args) =>
+            {
+                var deferral = args.GetDeferral();
+                try
+                {
+                    dialogErrorText.Visibility = Visibility.Collapsed;
+                    string email = emailBox.Text.Trim();
+                    string pass = passBox.Password;
+                    string confirmPass = confirmPassBox.Password;
+                    string? customUrl = string.IsNullOrWhiteSpace(urlBox.Text) ? null : urlBox.Text.Trim();
+                    string? customKey = string.IsNullOrWhiteSpace(keyBox.Password) ? null : keyBox.Password.Trim();
+
+                    if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
                     {
-                        var switchDialog = new ContentDialog
-                        {
-                            XamlRoot = this.XamlRoot,
-                            Title = "Switching Supabase Projects",
-                            Content = "You're already connected to a different Supabase project or account. Switching will treat ALL of your current local research data (bookmarks, highlights, notes, collections) as new data for the new project, and upload it there on the next sync.\n\nYour local data itself is never deleted. Continue?",
-                            PrimaryButtonText = "Switch Project",
-                            CloseButtonText = "Cancel",
-                            DefaultButton = ContentDialogButton.Close
-                        };
-                        VedaBaseModern.UI.Services.CustomThemeService.SyncDialogTheme(switchDialog, this.XamlRoot);
-                        var switchResult = await switchDialog.ShowAsync();
-                        if (switchResult != ContentDialogResult.Primary) return;
+                        dialogErrorText.Text = "Please enter a valid email address.";
+                        dialogErrorText.Visibility = Visibility.Visible;
+                        args.Cancel = true;
+                        return;
                     }
 
-                    await ViewModel.ConnectSupabaseAsync(url, key, email, pass);
+                    if (modeSelector.SelectedIndex == 1) // Create Account
+                    {
+                        if (string.IsNullOrEmpty(pass) || pass.Length < 6)
+                        {
+                            dialogErrorText.Text = "Password must be at least 6 characters long.";
+                            dialogErrorText.Visibility = Visibility.Visible;
+                            args.Cancel = true;
+                            return;
+                        }
+
+                        if (pass != confirmPass)
+                        {
+                            dialogErrorText.Text = "Passwords do not match. Please re-enter.";
+                            dialogErrorText.Visibility = Visibility.Visible;
+                            args.Cancel = true;
+                            return;
+                        }
+
+                        var result = await ViewModel.SignUpAsync(email, pass, customUrl, customKey);
+                        if (!result.Success)
+                        {
+                            dialogErrorText.Text = result.Message;
+                            dialogErrorText.Visibility = Visibility.Visible;
+                            args.Cancel = true;
+                            return;
+                        }
+                    }
+                    else if (modeSelector.SelectedIndex == 0) // Sign In
+                    {
+                        if (string.IsNullOrEmpty(pass))
+                        {
+                            dialogErrorText.Text = "Please enter your password.";
+                            dialogErrorText.Visibility = Visibility.Visible;
+                            args.Cancel = true;
+                            return;
+                        }
+
+                        var result = await ViewModel.SignInAsync(email, pass, customUrl, customKey);
+                        if (!result.Success)
+                        {
+                            dialogErrorText.Text = result.Message;
+                            dialogErrorText.Visibility = Visibility.Visible;
+                            args.Cancel = true;
+                            return;
+                        }
+                    }
+                    else if (modeSelector.SelectedIndex == 2) // Forgot Password
+                    {
+                        var result = await ViewModel.SendPasswordResetEmailAsync(email, customUrl, customKey);
+                        if (!result.Success)
+                        {
+                            dialogErrorText.Text = result.Message;
+                            dialogErrorText.Visibility = Visibility.Visible;
+                            args.Cancel = true;
+                            return;
+                        }
+                    }
                 }
-            }
+                finally
+                {
+                    deferral.Complete();
+                }
+            };
+
+            await dialog.ShowAsync();
         }
 
         private async void CreateSnapshotButton_Click(object sender, RoutedEventArgs e)
@@ -815,8 +945,29 @@ namespace VedaBaseModern.UI.Views
             await ViewModel.ResetHighlightPaletteCommand.ExecuteAsync(null);
         }
 
+        private async void CheckForUpdatesButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.CheckForUpdatesAsync();
+        }
+
+        private async void DownloadUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            string url = !string.IsNullOrWhiteSpace(ViewModel.UpdateDownloadUrl)
+                ? ViewModel.UpdateDownloadUrl
+                : "https://github.com/itzabhinav01/prabhupada-connect/releases";
+            try
+            {
+                await Windows.System.Launcher.LaunchUriAsync(new Uri(url));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Update] Failed to launch update URL: {ex.Message}");
+            }
+        }
+
         public Visibility BoolToVis(bool b) => b ? Visibility.Visible : Visibility.Collapsed;
         public Visibility BoolToInvertedVis(bool b) => b ? Visibility.Collapsed : Visibility.Visible;
+        public bool BoolToInverted(bool b) => !b;
         public Visibility StringToVis(string? s) => string.IsNullOrWhiteSpace(s) ? Visibility.Collapsed : Visibility.Visible;
     }
 }

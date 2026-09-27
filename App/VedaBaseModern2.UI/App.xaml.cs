@@ -31,6 +31,7 @@ public partial class App : Application
     public ReadingPreferencesService ReadingPreferencesService { get; }
     public ConcordanceService ConcordanceService { get; }
     public BookImportService BookImportService { get; }
+    public IAppUpdateService UpdateService { get; }
 
     public AppTheme StartupTheme => _startupTheme;
     private AppTheme _startupTheme = AppTheme.System;
@@ -147,6 +148,7 @@ public partial class App : Application
         ReadingPreferencesService = new ReadingPreferencesService();
         ConcordanceService = new ConcordanceService(descriptor.DatabasePath ?? corpusDbPath);
         BookImportService = new BookImportService(descriptor.DatabasePath ?? corpusDbPath, BookRegistry);
+        UpdateService = new AppUpdateService();
 
         try
         {
@@ -206,6 +208,20 @@ public partial class App : Application
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"[App] Auto-backup on startup failed: {ex}");
+                }
+            });
+
+            // Trigger silent anonymous usage heartbeat ping in background
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var pingService = new AppPingService(UserRepository);
+                    await pingService.SendHeartbeatPingAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Telemetry ping failed: {ex}");
                 }
             });
         }

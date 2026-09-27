@@ -38,6 +38,24 @@ namespace VedaBaseModern.Core.Services
         Task<SyncConnectionTestResult> ConfigureSupabaseAsync(string projectUrl, string apiKey, string? userEmail = null, string? userPassword = null);
 
         /// <summary>
+        /// Registers a new devotee account with Supabase Auth and, if verification is not required, immediately connects cloud sync.
+        /// Uses default project credentials from TelemetryConfig unless custom credentials are provided.
+        /// </summary>
+        Task<SyncAuthResult> SignUpAsync(string email, string password, string? customUrl = null, string? customAnonKey = null);
+
+        /// <summary>
+        /// Signs into an existing devotee account with Supabase Auth and connects cloud sync.
+        /// Uses default project credentials from TelemetryConfig unless custom credentials are provided.
+        /// </summary>
+        Task<SyncAuthResult> SignInAsync(string email, string password, string? customUrl = null, string? customAnonKey = null);
+
+        /// <summary>
+        /// Sends a password reset email via Supabase Auth for an existing account.
+        /// Uses default project credentials from TelemetryConfig unless custom credentials are provided.
+        /// </summary>
+        Task<SyncAuthResult> SendPasswordResetEmailAsync(string email, string? customUrl = null, string? customAnonKey = null);
+
+        /// <summary>
         /// Configures the periodic background synchronization interval in minutes (0 = disabled/manual only).
         /// </summary>
         Task SetSyncIntervalAsync(int intervalMinutes);
