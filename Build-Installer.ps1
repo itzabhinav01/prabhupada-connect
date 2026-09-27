@@ -1,10 +1,27 @@
 # Prabhupāda Connect - Automated 1-Click Installer Generator
 # Builds the Release binaries and packages everything into a single standalone setup exe
 
+[CmdletBinding()]
+param(
+    [string]$Version = ""
+)
+
 $ErrorActionPreference = "Stop"
+
+if (-not $Version) {
+    $vmFile = "$PSScriptRoot\App\VedaBaseModern2.UI\ViewModels\SettingsViewModel.cs"
+    if (Test-Path $vmFile) {
+        $match = Select-String -Path $vmFile -Pattern '_currentAppVersion\s*=\s*"([^"]+)"'
+        if ($match -and $match.Matches.Count -gt 0) {
+            $Version = $match.Matches[0].Groups[1].Value
+        }
+    }
+}
+if (-not $Version) { $Version = "2.0.3" }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "   Prabhupada Connect - Standalone Installer Generator   " -ForegroundColor Cyan
+Write-Host "   Target Version: v$Version                             " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -111,13 +128,13 @@ if (-not (Test-Path $distDir)) {
 }
 
 $issPath = "$PSScriptRoot\installer\PrabhupadaConnect.iss"
-& "$isccPath" "$issPath"
+& "$isccPath" "/DMyAppVersion=$Version" "/DOutputBaseFilename=PrabhupadaConnect-Setup-v$Version" "$issPath"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ERROR: Inno Setup compilation failed!"
     exit 1
 }
 
-$setupExe = "$distDir\PrabhupadaConnect-Setup-v2.0.1.exe"
+$setupExe = "$distDir\PrabhupadaConnect-Setup-v$Version.exe"
 if (Test-Path $setupExe) {
     $exeSizeMB = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
     Write-Host ""
@@ -125,7 +142,7 @@ if (Test-Path $setupExe) {
     Write-Host "   SUCCESS! STANDALONE INSTALLER CREATED SUCCESSFULLY!   " -ForegroundColor Green
     Write-Host "==========================================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "File Name : PrabhupadaConnect-Setup-v2.0.1.exe" -ForegroundColor Cyan
+    Write-Host "File Name : PrabhupadaConnect-Setup-v$Version.exe" -ForegroundColor Cyan
     Write-Host "File Size : $exeSizeMB MB" -ForegroundColor Cyan
     Write-Host "Location  : $setupExe" -ForegroundColor Cyan
     Write-Host ""
