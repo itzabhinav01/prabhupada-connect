@@ -2,7 +2,7 @@
 ; Generates a single standalone installer exe for 1-click installation
 
 #define MyAppName "Prabhupāda Connect"
-#define MyAppVersion "2.0"
+#define MyAppVersion "2.0.1"
 #define MyAppPublisher "Bhaktivedanta Research Group"
 #define MyAppURL "https://github.com/itzabhinav01/prabhupada-connect"
 #define MyAppExeName "VedaBaseModern2.UI.exe"
@@ -20,7 +20,7 @@ DisableDirPage=no
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist
-OutputBaseFilename=PrabhupadaConnect-Setup-v2.0
+OutputBaseFilename=PrabhupadaConnect-Setup-v2.0.1
 SetupIconFile=..\App\VedaBaseModern2.UI\Assets\AppIcon.ico
 Compression=lzma2/max
 SolidCompression=yes

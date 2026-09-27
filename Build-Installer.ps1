@@ -117,7 +117,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$setupExe = "$distDir\PrabhupadaConnect-Setup-v2.0.exe"
+$setupExe = "$distDir\PrabhupadaConnect-Setup-v2.0.1.exe"
 if (Test-Path $setupExe) {
     $exeSizeMB = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
     Write-Host ""
@@ -125,7 +125,7 @@ if (Test-Path $setupExe) {
     Write-Host "   SUCCESS! STANDALONE INSTALLER CREATED SUCCESSFULLY!   " -ForegroundColor Green
     Write-Host "==========================================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "File Name : PrabhupadaConnect-Setup-v2.0.exe" -ForegroundColor Cyan
+    Write-Host "File Name : PrabhupadaConnect-Setup-v2.0.1.exe" -ForegroundColor Cyan
     Write-Host "File Size : $exeSizeMB MB" -ForegroundColor Cyan
     Write-Host "Location  : $setupExe" -ForegroundColor Cyan
     Write-Host ""

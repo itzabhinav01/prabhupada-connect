@@ -1,10 +1,13 @@
 using System;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace VedaBaseModern.Core.Services
@@ -18,6 +21,9 @@ namespace VedaBaseModern.Core.Services
         public string ReleaseNotes { get; set; } = string.Empty;
         public string ReleaseUrl { get; set; } = string.Empty;
         public string? DownloadUrl { get; set; }
+        public string? PatchDownloadUrl { get; set; }
+        public bool IsPatchAvailable => !string.IsNullOrEmpty(PatchDownloadUrl);
+        public long PatchSizeBytes { get; set; }
         public string StatusMessage { get; set; } = string.Empty;
         public bool CheckSucceeded { get; set; }
     }
@@ -25,11 +31,17 @@ namespace VedaBaseModern.Core.Services
     public interface IAppUpdateService
     {
         Task<AppUpdateInfo> CheckForUpdatesAsync(string? currentVersionOverride = null);
+        Task<(bool Success, string Message)> DownloadAndApplyPatchAsync(
+            string patchUrl,
+            string? targetDirectory = null,
+            IProgress<(double Percentage, string Status)>? progress = null,
+            CancellationToken cancellationToken = default);
     }
 
     /// <summary>
     /// Checks the official GitHub repository for updates and release installers.
-    /// Safely handles offline states, rate limits, and non-existing releases.
+    /// Safely handles offline states, rate limits, non-existing releases, and
+    /// downloads / applies lightweight in-place binary patches (Update.zip).
     /// </summary>
     public class AppUpdateService : IAppUpdateService
     {
@@ -39,7 +51,7 @@ namespace VedaBaseModern.Core.Services
 
         public AppUpdateService(HttpClient? httpClient = null)
         {
-            _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         }
 
         public async Task<AppUpdateInfo> CheckForUpdatesAsync(string? currentVersionOverride = null)
@@ -96,7 +108,18 @@ namespace VedaBaseModern.Core.Services
                 info.ReleaseNotes = release.Body ?? string.Empty;
                 info.ReleaseUrl = !string.IsNullOrWhiteSpace(release.HtmlUrl) ? release.HtmlUrl : FallbackReleaseUrl;
 
-                // Look for direct executable installer in release assets (.exe)
+                // 1. Look for lightweight patch archive (.zip)
+                var patchAsset = release.Assets?.FirstOrDefault(a => 
+                    a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                    (a.Name.Contains("update", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("patch", StringComparison.OrdinalIgnoreCase)));
+
+                if (patchAsset != null)
+                {
+                    info.PatchDownloadUrl = patchAsset.BrowserDownloadUrl;
+                    info.PatchSizeBytes = patchAsset.Size;
+                }
+
+                // 2. Look for direct executable installer in release assets (.exe)
                 var exeAsset = release.Assets?.FirstOrDefault(a => 
                     a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
                     a.BrowserDownloadUrl.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
@@ -109,7 +132,12 @@ namespace VedaBaseModern.Core.Services
 
                 if (isNewer)
                 {
-                    info.StatusMessage = $"Update available: v{cleanTag} is ready for download!";
+                    string sizeInfo = info.PatchSizeBytes > 0 
+                        ? $" (~{(info.PatchSizeBytes / (1024.0 * 1024.0)):0.0} MB)"
+                        : string.Empty;
+                    info.StatusMessage = info.IsPatchAvailable
+                        ? $"Update available: v{cleanTag} ready for fast in-app update{sizeInfo}!"
+                        : $"Update available: v{cleanTag} is ready for download!";
                 }
                 else
                 {
@@ -131,6 +159,134 @@ namespace VedaBaseModern.Core.Services
                 info.StatusMessage = $"Failed to check for updates: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"[Update] Error: {ex}");
                 return info;
+            }
+        }
+
+        public async Task<(bool Success, string Message)> DownloadAndApplyPatchAsync(
+            string patchUrl,
+            string? targetDirectory = null,
+            IProgress<(double Percentage, string Status)>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(patchUrl))
+            {
+                return (false, "Invalid update download URL.");
+            }
+
+            try
+            {
+                targetDirectory ??= AppContext.BaseDirectory;
+
+                string tempDir = Path.Combine(Path.GetTempPath(), "PrabhupadaConnect_Update");
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, recursive: true); } catch { }
+                }
+                Directory.CreateDirectory(tempDir);
+
+                string zipPath = Path.Combine(tempDir, "update.zip");
+                string stageDir = Path.Combine(tempDir, "staged");
+
+                progress?.Report((5, "Connecting to download server..."));
+
+                using (var req = new HttpRequestMessage(HttpMethod.Get, patchUrl))
+                {
+                    req.Headers.UserAgent.Add(new ProductInfoHeaderValue("PrabhupadaConnect", "2.0"));
+                    using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    response.EnsureSuccessStatusCode();
+
+                    long totalBytes = response.Content.Headers.ContentLength ?? -1L;
+                    long totalRead = 0L;
+
+                    await using (var stream = await response.Content.ReadAsStreamAsync(cancellationToken))
+                    await using (var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+                    {
+                        var buffer = new byte[81920];
+                        int read;
+                        while ((read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+                        {
+                            await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                            totalRead += read;
+                            if (totalBytes > 0)
+                            {
+                                double pct = 5.0 + ((double)totalRead / totalBytes) * 75.0; // 5% to 80%
+                                string mbRead = (totalRead / (1024.0 * 1024.0)).ToString("0.0");
+                                string mbTotal = (totalBytes / (1024.0 * 1024.0)).ToString("0.0");
+                                progress?.Report((pct, $"Downloading update ({mbRead} MB / {mbTotal} MB)..."));
+                            }
+                            else
+                            {
+                                progress?.Report((40, $"Downloading update ({totalRead / 1024} KB)..."));
+                            }
+                        }
+                    }
+                }
+
+                progress?.Report((85, "Extracting update package..."));
+                Directory.CreateDirectory(stageDir);
+                ZipFile.ExtractToDirectory(zipPath, stageDir, overwriteFiles: true);
+
+                progress?.Report((95, "Restarting application to apply update..."));
+
+                // Create the update script that waits for current app to exit, copies files, and restarts
+                string cmdPath = Path.Combine(tempDir, "apply_update.cmd");
+                string scriptContent = $@"@echo off
+setlocal
+set ""TARGET={targetDirectory.TrimEnd('\\')}""
+set ""STAGE={stageDir.TrimEnd('\\')}""
+set ""EXE=VedaBaseModern2.UI.exe""
+
+:: Wait for app to completely terminate and release file locks
+timeout /t 1 /nobreak >nul
+:wait_process
+tasklist /fi ""imagename eq %EXE%"" 2>nul | findstr /i ""%EXE%"" >nul
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >nul
+    goto wait_process
+)
+
+:: Overwrite existing files with updated ones
+xcopy /y /e /q ""%STAGE%\*"" ""%TARGET%\"" >nul 2>&1
+
+:: Restart application cleanly
+cd /d ""%TARGET%""
+start """" ""%TARGET%\%EXE%""
+
+:: Clean up staging directory
+timeout /t 2 /nobreak >nul
+rd /s /q ""%STAGE%"" >nul 2>&1
+exit
+";
+                await File.WriteAllTextAsync(cmdPath, scriptContent, cancellationToken);
+
+                // Launch batch updater in background (hidden window)
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c \"\"{cmdPath}\"\"",
+                    UseShellExecute = true,
+                    CreateNoWindow = true,
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+                    WorkingDirectory = tempDir
+                };
+                System.Diagnostics.Process.Start(psi);
+
+                // Exit current process so the updater script can immediately overwrite files
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(300);
+                    Environment.Exit(0);
+                });
+
+                return (true, "Update applied. Restarting...");
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "Update was cancelled.");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Failed to apply update: {ex.Message}");
             }
         }
 
@@ -189,6 +345,9 @@ namespace VedaBaseModern.Core.Services
 
             [JsonPropertyName("browser_download_url")]
             public string BrowserDownloadUrl { get; set; } = string.Empty;
+
+            [JsonPropertyName("size")]
+            public long Size { get; set; }
         }
     }
 }

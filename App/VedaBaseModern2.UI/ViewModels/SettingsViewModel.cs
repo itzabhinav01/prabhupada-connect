@@ -68,7 +68,14 @@ namespace VedaBaseModern.UI.ViewModels
         [ObservableProperty] private string _latestVersionDisplay = string.Empty;
         [ObservableProperty] private string _updateReleaseNotes = string.Empty;
         [ObservableProperty] private string _updateDownloadUrl = string.Empty;
-        [ObservableProperty] private string _currentAppVersion = "2.0.0";
+        [ObservableProperty] private string _currentAppVersion = "2.0.1";
+        public string DisplayAppVersion => $"v{CurrentAppVersion}";
+        [ObservableProperty] private bool _isPatchAvailable;
+        [ObservableProperty] private string _patchDownloadUrl = string.Empty;
+        [ObservableProperty] private long _patchSizeBytes;
+        [ObservableProperty] private bool _isApplyingUpdate;
+        [ObservableProperty] private double _updateProgressPercentage;
+        [ObservableProperty] private string _updateProgressText = string.Empty;
 
         [ObservableProperty] private int _themeIndex;
         [ObservableProperty] public partial bool IsCustomThemeSelected { get; set; }
@@ -965,16 +972,60 @@ namespace VedaBaseModern.UI.ViewModels
                 LatestVersionDisplay = info.LatestVersion;
                 UpdateReleaseNotes = info.ReleaseNotes;
                 UpdateDownloadUrl = info.DownloadUrl ?? info.ReleaseUrl;
+                IsPatchAvailable = info.IsPatchAvailable;
+                PatchDownloadUrl = info.PatchDownloadUrl;
+                PatchSizeBytes = info.PatchSizeBytes;
                 UpdateStatusMessage = info.StatusMessage;
             }
             catch (Exception ex)
             {
                 IsUpdateAvailable = false;
+                IsPatchAvailable = false;
                 UpdateStatusMessage = $"Update check failed: {ex.Message}";
             }
             finally
             {
                 IsCheckingForUpdates = false;
+            }
+        }
+
+        public async Task<bool> ApplyPatchUpdateAsync()
+        {
+            if (string.IsNullOrWhiteSpace(PatchDownloadUrl)) return false;
+
+            IsApplyingUpdate = true;
+            UpdateProgressPercentage = 0;
+            UpdateProgressText = "Preparing update...";
+
+            try
+            {
+                var progress = new Progress<(double Percentage, string Status)>(report =>
+                {
+                    UpdateProgressPercentage = report.Percentage;
+                    UpdateProgressText = report.Status;
+                });
+
+                var (success, message) = await _updateService.DownloadAndApplyPatchAsync(
+                    PatchDownloadUrl,
+                    targetDirectory: null,
+                    progress: progress);
+
+                if (!success)
+                {
+                    UpdateStatusMessage = message;
+                    UpdateProgressText = message;
+                    IsApplyingUpdate = false;
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                UpdateStatusMessage = $"Update failed: {ex.Message}";
+                UpdateProgressText = $"Failed: {ex.Message}";
+                IsApplyingUpdate = false;
+                return false;
             }
         }
 

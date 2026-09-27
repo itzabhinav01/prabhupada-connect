@@ -953,6 +953,11 @@ namespace VedaBaseModern.UI.Views
             await ViewModel.CheckForUpdatesAsync();
         }
 
+        private async void ApplyPatchUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.ApplyPatchUpdateAsync();
+        }
+
         private async void DownloadUpdateButton_Click(object sender, RoutedEventArgs e)
         {
             string url = !string.IsNullOrWhiteSpace(ViewModel.UpdateDownloadUrl)

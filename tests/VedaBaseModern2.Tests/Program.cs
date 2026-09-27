@@ -1063,6 +1063,11 @@ Further check [[CC Adi 1.1]] for invocations.";
         Assert(info?.CurrentVersion == "2.0.0", "AppUpdateInfo preserves current app version", info?.CurrentVersion);
         Assert(!string.IsNullOrEmpty(info?.ReleaseUrl), "ReleaseUrl is never empty");
         Assert(!string.IsNullOrEmpty(info?.StatusMessage), "StatusMessage is populated");
+
+        // 3. Patch Update graceful handling for invalid or empty URL
+        var emptyPatchResult = await updateService.DownloadAndApplyPatchAsync(string.Empty);
+        Assert(emptyPatchResult.Success == false, "Empty patch URL gracefully returns failure");
+        Assert(!string.IsNullOrWhiteSpace(emptyPatchResult.Message), "Empty patch URL returns descriptive message");
     }
 
     private static async Task TestAuthMethodsAsync(string testUserDb)
