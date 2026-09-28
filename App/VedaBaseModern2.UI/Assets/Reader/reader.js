@@ -159,6 +159,7 @@
 
     function formatSynonyms(synonymsText, fieldHighlights) {
         if (!synonymsText) return '';
+        synonymsText = healBrokenSanskritAndSplits(synonymsText);
         const parts = synonymsText.split(';');
         return parts.map(part => {
             const trimmed = part.trim();
@@ -508,8 +509,12 @@
         // 1. Hyphenated word wrap: "transcen-\ndental" -> "transcendental"
         let healed = text.replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+)-\r?\n\s*([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+)/g, '$1$2');
 
-        // 2. Heal broken words with spaces
+        // 2. Heal broken OCR words and splits
         healed = healed
+            .replace(/\bnotori\s+ous\b/gi, 'notorious')
+            .replace(/(^|[\s—–\-\(\[])evānutt\s+amāṁ(?=[\s—–\-\.\,\;\:\?\!\)\]]|$)/gi, '$1evānuttamāṁ')
+            .replace(/(^|[\s—–\-\(\[])Bhaga\s+vān(?=[\s—–\-\.\,\;\:\?\!\)\]]|$)/g, '$1Bhagavān')
+            .replace(/(^|[\s—–\-\(\[])bhaga\s+vān(?=[\s—–\-\.\,\;\:\?\!\)\]]|$)/g, '$1bhagavān')
             .replace(/\bKṛṣ\s+ṇa\b/g, 'Kṛṣṇa')
             .replace(/\bKṛṣṇ\s+a\b/g, 'Kṛṣṇa')
             .replace(/\bK\s+ṛṣṇa\b/g, 'Kṛṣṇa')
@@ -565,6 +570,21 @@
             .replace(/\bafflic\s+ted\b/g, 'afflicted')
             .replace(/\\?\*\s*Vṛndāvana is the transcendental/g, '*Vṛndāvana is the transcendental');
 
+        // 3. Heal split contractions across newlines or spaces: e.g. "don\n't" or "don 't" -> "don't"
+        healed = healed
+            .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[\t ]*\r?\n[\t ]*(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3')
+            .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
+
+        // 4. Heal stray line-wrap breaks before punctuation: e.g. "India\r\n." -> "India. "
+        healed = healed
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*([,;:?!])[ \t]*/g, '$1$2 ')
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*\.(?!\.)[ \t]*/g, '$1. ');
+
+        // 5. Heal stray whitespace before punctuation: e.g. "Goloka  , on" -> "Goloka, on"
+        healed = healed
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+([,;:?!])[ \t]*/g, '$1$2 ')
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)[ \t]*/g, '$1. ');
+
         return healed;
     }
 
@@ -618,14 +638,22 @@
 
                     function flushCurrent() {
                         if (currentSpeaker) {
-                            const speechText = currentText.join(' ');
+                            let speechText = currentText.join(' ');
+                            speechText = speechText
+                                .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+([,;:?!])/g, '$1$2')
+                                .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)/g, '$1.')
+                                .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
                             let hl = applyHighlights(speechText, fieldHighlights);
                             hl = linkifyScriptureReferences(hl);
                             rendered.push(`<p class="conversation-speech"><strong class="speaker-name">${escapeHtml(currentSpeaker)}:</strong> ${hl}</p>`);
                             currentSpeaker = null;
                             currentText = [];
                         } else if (currentText.length > 0) {
-                            const normalText = currentText.join(' ');
+                            let normalText = currentText.join(' ');
+                            normalText = normalText
+                                .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+([,;:?!])/g, '$1$2')
+                                .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)/g, '$1.')
+                                .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
                             let hl = applyHighlights(normalText, fieldHighlights);
                             hl = linkifyScriptureReferences(hl);
                             rendered.push(`<p>${hl}</p>`);
@@ -649,7 +677,11 @@
             }
 
             // Regular prose paragraph: normalize single linebreaks to spaces
-            const normalized = trimmed.replace(/\r?\n\s*/g, ' ');
+            let normalized = trimmed.replace(/\r?\n\s*/g, ' ');
+            normalized = normalized
+                .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+([,;:?!])/g, '$1$2')
+                .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)/g, '$1.')
+                .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
             const isQuote = /^["“'‘].*["”'’]$/.test(normalized);
             let highlighted = applyHighlights(normalized, fieldHighlights);
             highlighted = linkifyScriptureReferences(highlighted);

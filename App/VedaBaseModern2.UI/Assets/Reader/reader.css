@@ -14,7 +14,7 @@
     --font-family-sanskrit: 'Sanskrit Text', 'Nirmala UI', 'Mangal', sans-serif;
 
     --font-size-verse: 20px;
-    --font-size-translit: 18px;
+    --font-size-translit: 20px;
     --font-size-synonyms: 16px;
     --font-size-translation: 17px;
     --font-size-purport: 16px;
@@ -240,8 +240,8 @@ body {
     font-size: var(--font-size-translit);
     font-style: italic;
     text-align: center;
-    color: var(--text-secondary);
-    line-height: 1.9;
+    color: var(--text-primary);
+    line-height: 2.0;
     margin: 0 auto 28px auto;
     max-width: 680px;
     white-space: pre-line;

@@ -72,9 +72,9 @@ namespace VedaBaseModern.UI.ViewModels
         // settings are cached in-memory after the first real read). See
         // MILESTONE_6_SETTINGS_ARCHITECTURE.md for the exact mapping tables and
         // why LineHeight is applied to Latin-script blocks only, never Devanagari.
-        [ObservableProperty] private double _devanagariFontSize = 24;
-        [ObservableProperty] private double _transliterationFontSize = 18;
-        [ObservableProperty] private double _transliterationLineHeight = 27;
+        [ObservableProperty] private double _devanagariFontSize = 20;
+        [ObservableProperty] private double _transliterationFontSize = 20;
+        [ObservableProperty] private double _transliterationLineHeight = 30;
         [ObservableProperty] private double _synonymsFontSize = 16;
         [ObservableProperty] private double _synonymsLineHeight = 24;
         [ObservableProperty] private double _translationFontSize = 18;
@@ -540,8 +540,8 @@ namespace VedaBaseModern.UI.ViewModels
         // without any flicker, SetText rebuild, or scroll-position reset.
         private void ApplyFontSizes()
         {
-            DevanagariFontSize = 24 * _cachedFontScale * ZoomMultiplier;
-            TransliterationFontSize = 18 * _cachedFontScale * ZoomMultiplier;
+            DevanagariFontSize = 20 * _cachedFontScale * ZoomMultiplier;
+            TransliterationFontSize = 20 * _cachedFontScale * ZoomMultiplier;
             TransliterationLineHeight = TransliterationFontSize * _cachedSpacingMultiplier;
             SynonymsFontSize = 16 * _cachedFontScale * ZoomMultiplier;
             SynonymsLineHeight = SynonymsFontSize * _cachedSpacingMultiplier;
