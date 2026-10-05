@@ -333,7 +333,7 @@ namespace VedaBaseModern.UI.ViewModels
             _settingsService = settingsService;
         }
 
-        public async Task LoadRecordAsync(string recordKey)
+        public async Task LoadRecordAsync(string recordKey, bool recordHistory = true)
         {
             IsLoading = true;
             ErrorMessage = string.Empty;
@@ -349,7 +349,7 @@ namespace VedaBaseModern.UI.ViewModels
                     CurrentRecord = record;
                     BreadcrumbText = _repository.GetBreadcrumb(record.BookKey, record.Reference);
                     ChapterHeader = _repository.GetCanonicalChapterHeader(record.BookKey, record.Reference);
-                    await LoadUserDataAsync(recordKey);
+                    await LoadUserDataAsync(recordKey, invokeContentReady: false);
 
                     if (IsContinuousChapter)
                     {
@@ -361,7 +361,10 @@ namespace VedaBaseModern.UI.ViewModels
                     // fault. Deliberately not awaited - a slow/locked user.db must
                     // never delay showing the record the user asked for. See
                     // MILESTONE_5_HISTORY_ARCHITECTURE.md section 6.
-                    _ = RecordHistorySafeAsync(recordKey);
+                    if (recordHistory)
+                    {
+                        _ = RecordHistorySafeAsync(recordKey);
+                    }
 
                     ContentReady?.Invoke();
                 }
@@ -400,7 +403,7 @@ namespace VedaBaseModern.UI.ViewModels
         // apply stale/empty highlight formatting.
         public event Action? ContentReady;
 
-        private async Task LoadUserDataAsync(string recordKey)
+        private async Task LoadUserDataAsync(string recordKey, bool invokeContentReady = true)
         {
             // IsBookmarkedAsync is a targeted single-row lookup - avoids the
             // full-table GetAllBookmarksAsync() scan this used to run on
@@ -435,7 +438,10 @@ namespace VedaBaseModern.UI.ViewModels
             var notes = await _userRepository.GetNotesAsync(recordKey);
             foreach (var note in notes) Notes.Add(note);
             await LoadHighlightsAsync(recordKey);
-            ContentReady?.Invoke();
+            if (invokeContentReady)
+            {
+                ContentReady?.Invoke();
+            }
         }
 
         public async Task RefreshCollectionsAsync()
@@ -634,9 +640,8 @@ namespace VedaBaseModern.UI.ViewModels
             BreadcrumbText = _repository.GetBreadcrumb(record.BookKey, record.Reference);
             ChapterHeader = _repository.GetCanonicalChapterHeader(record.BookKey, record.Reference);
             IsContinuousChapter = false;
-            _ = LoadUserDataAsync(record.RecordKey);
+            _ = LoadUserDataAsync(record.RecordKey, invokeContentReady: true);
             _ = RecordHistorySafeAsync(record.RecordKey);
-            ContentReady?.Invoke();
         }
 
         public async Task LoadChapterRecordsAsync(string recordKey)

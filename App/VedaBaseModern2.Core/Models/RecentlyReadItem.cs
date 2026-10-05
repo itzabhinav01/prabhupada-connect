@@ -22,8 +22,12 @@ namespace VedaBaseModern.Core.Models
         public string BookTitle { get; set; } = string.Empty;
         public string Reference { get; set; } = string.Empty;
         public string? Title { get; set; }
+        public string Preview { get; set; } = string.Empty;
 
         public string LastOpenedDisplay => LastOpenedUtc.ToLocalTime().ToString("g");
+        public string MetaDisplay => OpenCount > 1
+            ? $"Last read {LastOpenedDisplay}  •  Read {OpenCount} times"
+            : $"Last read {LastOpenedDisplay}";
 
         // Pure display hint for the list (dim unavailable rows). Kept on the
         // model, not computed via x:Bind function-binding, to avoid the WMC9999

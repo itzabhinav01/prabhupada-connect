@@ -149,8 +149,34 @@ namespace VedaBaseModern.Core.Repositories
         // content, so it is not the "global corpus cache" the milestone warns
         // against.
         private List<BookNode>? _cachedHierarchy;
+        private Dictionary<string, string>? _dbBookTitles;
 
-        public void InvalidateLibraryHierarchyCache() => _cachedHierarchy = null;
+        public void InvalidateLibraryHierarchyCache()
+        {
+            _cachedHierarchy = null;
+            _dbBookTitles = null;
+        }
+
+        private Dictionary<string, string> EnsureDbBookTitlesLoaded()
+        {
+            if (_dbBookTitles != null) return _dbBookTitles;
+            var titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using var connection = new SqliteConnection(_connectionString);
+                connection.Open();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "SELECT BookKey, Title FROM Books WHERE Title IS NOT NULL AND TRIM(Title) != '';";
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    titles[r.GetString(0)] = r.GetString(1);
+                }
+            }
+            catch { }
+            _dbBookTitles = titles;
+            return titles;
+        }
 
         public async Task<List<BookNode>> GetLibraryHierarchyAsync()
         {
@@ -584,7 +610,16 @@ namespace VedaBaseModern.Core.Repositories
             {
                 return fromRegistry;
             }
-            return BookTitles.TryGetValue(bookKey, out var t) ? t : bookKey;
+            if (BookTitles.TryGetValue(bookKey, out var t))
+            {
+                return t;
+            }
+            var dbTitles = EnsureDbBookTitlesLoaded();
+            if (dbTitles.TryGetValue(bookKey, out var dbTitle) && !string.IsNullOrWhiteSpace(dbTitle))
+            {
+                return dbTitle;
+            }
+            return bookKey;
         }
 
         public string GetCanonicalChapterHeader(string bookKey, string? reference)
@@ -610,20 +645,29 @@ namespace VedaBaseModern.Core.Repositories
             }
             else if (bookKey == "SB")
             {
-                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^(?:SB\s+)?(\d+)\.(\d+)\.(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^(?:SB\s+)?(\d+)\.(\d+)\.(\d+(?:[-–]\d+)?)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (match.Success) return $"{bookTitle} › Canto {match.Groups[1].Value} › Chapter {match.Groups[2].Value} › Verse {match.Groups[3].Value}";
                 var chMatch = System.Text.RegularExpressions.Regex.Match(firstRef, @"^(?:SB\s+)?(\d+)\.(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (chMatch.Success) return $"{bookTitle} › Canto {chMatch.Groups[1].Value} › Chapter {chMatch.Groups[2].Value}";
+                string cleanFront = System.Text.RegularExpressions.Regex.Replace(firstRef, @"^SB\s+", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+                return $"{bookTitle} › Canto 1 › {cleanFront}";
             }
             else if (bookKey == "DI" || bookKey == "MADHYA" || bookKey == "ANTYA")
             {
                 string lila = bookKey == "DI" ? "Ādi-līlā" : (bookKey == "MADHYA" ? "Madhya-līlā" : "Antya-līlā");
                 if (firstRef.Contains("Concluding Words", StringComparison.OrdinalIgnoreCase))
                     return $"Śrī Caitanya-caritāmṛta › {lila} › Concluding Words";
-                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^(?:[ĀA]di|Madhya|Antya)\s+(\d+)\.(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^(?:[ĀA]di|Madhya|Antya)\s+(\d+)\.(\d+(?:[-–]\d+)?)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (match.Success) return $"Śrī Caitanya-caritāmṛta › {lila} › Chapter {match.Groups[1].Value} › Verse {match.Groups[2].Value}";
                 var chMatch = System.Text.RegularExpressions.Regex.Match(firstRef, @"^(?:[ĀA]di|Madhya|Antya)\s+(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (chMatch.Success) return $"Śrī Caitanya-caritāmṛta › {lila} › Chapter {chMatch.Groups[1].Value}";
+            }
+            else if (bookKey == "BB")
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^BB\s+(\d+)\.(\d+)\.(\d+(?:[-–]\d+)?)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success) return $"{bookTitle} › Part {match.Groups[1].Value} › Chapter {match.Groups[2].Value} › Verse {match.Groups[3].Value}";
+                var chMatch = System.Text.RegularExpressions.Regex.Match(firstRef, @"^BB\s+(\d+)\.(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (chMatch.Success) return $"{bookTitle} › Part {chMatch.Groups[1].Value} › Chapter {chMatch.Groups[2].Value}";
             }
             else if (bookKey == "ISO")
             {
@@ -656,8 +700,12 @@ namespace VedaBaseModern.Core.Repositories
             else if (bookKey == "SVA")
             {
                 var match = System.Text.RegularExpressions.Regex.Match(firstRef, @"^SVA\s+(\d+)\.(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (match.Success && int.TryParse(match.Groups[1].Value, out int secNum))
+                if (match.Success && int.TryParse(match.Groups[1].Value, out int secNum) && int.TryParse(match.Groups[2].Value, out int songNum))
                 {
+                    if (secNum == 1 && songNum <= 3)
+                    {
+                        return $"{bookTitle} › Foreword & Introduction › SVA 1.{songNum}";
+                    }
                     string secName = secNum switch
                     {
                         1 => "1: Standard Prayers",
@@ -666,7 +714,7 @@ namespace VedaBaseModern.Core.Repositories
                         4 => "4: Songs of Other Vaiṣṇava Ācāryas",
                         _ => $"Section {secNum}"
                     };
-                    return $"{bookTitle} › {secName} › Song {match.Groups[2].Value}";
+                    return $"{bookTitle} › {secName} › Song {songNum}";
                 }
             }
             else if (bookKey == "TMG")
@@ -1064,7 +1112,9 @@ namespace VedaBaseModern.Core.Repositories
                                   WHEN r.Reference LIKE $cleanQuery || '%' OR r.Reference LIKE '% ' || $cleanQuery || '%' THEN 2
                                   WHEN r.RecordKey LIKE '%' || $cleanQuery || '%' THEN 3
                                   ELSE 4
-                                END) AS ExactCitationPriority
+                                END) AS ExactCitationPriority,
+                               r.rowid,
+                               COALESCE(NULLIF(r.Translation, ''), NULLIF(r.Transliteration, ''), substr(r.Purports, 1, 320), NULLIF(r.Synonyms, ''), '') AS FallbackPreview
                         FROM RecordsFts fts
                         JOIN Records r ON r.rowid = fts.rowid
                         LEFT JOIN Books b ON b.BookKey = r.BookKey
@@ -1135,6 +1185,7 @@ namespace VedaBaseModern.Core.Repositories
                     queryCmd.Parameters.AddWithValue("$offset", offset);
 
                     string cleanQuery = System.Text.RegularExpressions.Regex.Replace(query.TrimStart('@').Trim(), @"[^\w]", "").ToUpperInvariant();
+                    var rowIdByIndex = new List<long>();
 
                     using (var reader = queryCmd.ExecuteReader())
                     {
@@ -1145,6 +1196,12 @@ namespace VedaBaseModern.Core.Repositories
                             string refText = reader.IsDBNull(2) ? "" : reader.GetString(2);
                             int seq = reader.GetInt32(3);
                             int exactPriority = reader.IsDBNull(4) ? 4 : reader.GetInt32(4);
+                            long rowId = reader.IsDBNull(5) ? -1L : reader.GetInt64(5);
+                            string fallbackPreview = reader.IsDBNull(6) ? "" : reader.GetString(6);
+                            if (!string.IsNullOrWhiteSpace(fallbackPreview))
+                            {
+                                fallbackPreview = System.Text.RegularExpressions.Regex.Replace(fallbackPreview, @"\s+", " ").Trim();
+                            }
 
                             string title = BookTitles.TryGetValue(bk, out var t) ? t : bk;
 
@@ -1164,13 +1221,14 @@ namespace VedaBaseModern.Core.Repositories
                                 }
                             }
 
+                            rowIdByIndex.Add(rowId);
                             results.Add(new SearchResult
                             {
                                 RecordKey = rk,
                                 BookKey = bk ?? "",
                                 Reference = string.IsNullOrWhiteSpace(refText) ? (bk ?? "") : refText,
                                 BookTitle = title,
-                                Preview = "",
+                                Preview = fallbackPreview,
                                 Category = "Scripture",
                                 Sequence = seq,
                                 IsExactMatch = isExact
@@ -1179,40 +1237,61 @@ namespace VedaBaseModern.Core.Repositories
                     }
 
 
-                    // 4. Fetch highlighted snippets only for the winning display results
+                    // 4. Fetch highlighted snippets only for the winning display results using rowid
+                    // (filtering by rowid avoids scanning orphan FTS rows in external content table)
                     if (results.Count > 0)
                     {
-                        using var snipCmd = connection.CreateCommand();
-                        var placeholders = new List<string>();
-                        for (int i = 0; i < results.Count; i++)
+                        try
                         {
-                            string p = $"$sk{i}";
-                            placeholders.Add(p);
-                            snipCmd.Parameters.AddWithValue(p, results[i].RecordKey);
-                        }
-                        snipCmd.CommandText = $@"
-                            SELECT RecordKey, snippet(RecordsFts, -1, '«', '»', '...', 25)
-                            FROM RecordsFts
-                            WHERE RecordKey IN ({string.Join(",", placeholders)}) AND RecordsFts MATCH $q";
-                        snipCmd.Parameters.AddWithValue("$q", ftsQuery);
-
-                        var snipMap = new Dictionary<string, string>();
-                        using (var snipReader = snipCmd.ExecuteReader())
-                        {
-                            while (snipReader.Read())
+                            using var snipCmd = connection.CreateCommand();
+                            var placeholders = new List<string>();
+                            for (int i = 0; i < rowIdByIndex.Count; i++)
                             {
-                                string k = snipReader.GetString(0);
-                                string s = snipReader.IsDBNull(1) ? "" : snipReader.GetString(1);
-                                snipMap[k] = s;
+                                if (rowIdByIndex[i] < 0) continue;
+                                string p = $"$sid{i}";
+                                placeholders.Add(p);
+                                snipCmd.Parameters.AddWithValue(p, rowIdByIndex[i]);
+                            }
+
+                            if (placeholders.Count > 0)
+                            {
+                                snipCmd.CommandText = $@"
+                                    SELECT rowid, snippet(RecordsFts, -1, '«', '»', '...', 28)
+                                    FROM RecordsFts
+                                    WHERE rowid IN ({string.Join(",", placeholders)}) AND RecordsFts MATCH $q";
+                                snipCmd.Parameters.AddWithValue("$q", ftsQuery);
+
+                                var snipMap = new Dictionary<long, string>();
+                                using (var snipReader = snipCmd.ExecuteReader())
+                                {
+                                    while (snipReader.Read())
+                                    {
+                                        long rid = snipReader.GetInt64(0);
+                                        string s = snipReader.IsDBNull(1) ? "" : snipReader.GetString(1);
+                                        snipMap[rid] = s;
+                                    }
+                                }
+
+                                for (int i = 0; i < results.Count; i++)
+                                {
+                                    long rid = rowIdByIndex[i];
+                                    if (snipMap.TryGetValue(rid, out var snip) && !string.IsNullOrWhiteSpace(snip))
+                                    {
+                                        string cleanedSnip = System.Text.RegularExpressions.Regex.Replace(snip, @"\s+", " ").Trim();
+                                        string plainSnip = cleanedSnip.Replace("«", "").Replace("»", "").Trim();
+                                        // Only replace fallback if snippet isn't merely repeating the Reference or RecordKey header
+                                        if (!string.Equals(plainSnip, results[i].Reference, StringComparison.OrdinalIgnoreCase) &&
+                                            !string.Equals(plainSnip, results[i].RecordKey, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            results[i].Preview = cleanedSnip;
+                                        }
+                                    }
+                                }
                             }
                         }
-
-                        foreach (var r in results)
+                        catch (SqliteException)
                         {
-                            if (snipMap.TryGetValue(r.RecordKey, out var snip) && !string.IsNullOrWhiteSpace(snip))
-                            {
-                                r.Preview = snip;
-                            }
+                            // FallbackPreview from Records is already populated on each result
                         }
                     }
                 }

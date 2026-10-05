@@ -67,13 +67,25 @@ namespace VedaBaseModern.Core.Services
             if (ContainsDevanagari(query))
             {
                 query = DevanagariNormalizer.Normalize(query);
+                string devSuffix = isExactWord ? "" : "*";
+                bool expandedAny = false;
                 foreach (var kvp in DevanagariExpansions)
                 {
                     if (query.Contains(kvp.Key))
                     {
-                        string expanded = "(" + string.Join(" OR ", kvp.Value.Select(v => $"\"{v}\"")) + ")";
+                        string expanded = "(" + string.Join(" OR ", kvp.Value.Select(v => $"\"{v}\"{devSuffix}")) + ")";
                         query = query.Replace(kvp.Key, expanded);
+                        expandedAny = true;
                     }
+                }
+                if (!isExactWord && !expandedAny && !query.StartsWith("\""))
+                {
+                    var devWords = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    query = string.Join(" ", devWords.Select(w =>
+                    {
+                        string clean = w.TrimEnd('*').Replace("\"", "\"\"");
+                        return string.IsNullOrEmpty(clean) ? "" : $"\"{clean}\"*";
+                    }).Where(w => !string.IsNullOrEmpty(w)));
                 }
                 return query;
             }
@@ -124,7 +136,7 @@ namespace VedaBaseModern.Core.Services
             }
 
             // 5. Token extraction: proximity expressions, quoted phrases, or individual words
-            var tokenMatches = Regex.Matches(query, @"(?i:NEAR\s*\([^)]+\))|""[^""]+""|[\p{L}\p{N}\p{M}]+(?:[-.][\p{L}\p{N}\p{M}]+)*|[^\s]+");
+            var tokenMatches = Regex.Matches(query, @"(?i:NEAR\s*\([^)]+\))|""[^""]+""|[\p{L}\p{N}\p{M}]+(?:[-.][\p{L}\p{N}\p{M}]+)*\*?|[^\s]+");
             var resultTerms = new List<string>();
 
             foreach (Match match in tokenMatches)
@@ -168,19 +180,50 @@ namespace VedaBaseModern.Core.Services
                 while (token.StartsWith("*")) token = token.Substring(1);
                 if (string.IsNullOrEmpty(token)) continue;
 
+                // Detect explicit trailing wildcard (*)
+                bool hasTrailingWildcard = token.EndsWith("*");
+                while (token.EndsWith("*")) token = token.Substring(0, token.Length - 1);
+                if (string.IsNullOrEmpty(token)) continue;
+
+                bool usePrefixMatch = !isExactWord || hasTrailingWildcard;
+                string suffix = usePrefixMatch ? "*" : "";
+
                 // Check phonetic / transliteration expansions
-                string cleanWord = Regex.Replace(token, @"[^\p{L}\p{N}]", "");
-                if (!string.IsNullOrEmpty(cleanWord) && PhoneticExpansions.TryGetValue(cleanWord, out var expansions))
+                string cleanWord = Regex.Replace(token, @"[^\p{L}\p{N}\p{M}]", "");
+                if (!string.IsNullOrEmpty(cleanWord))
                 {
-                    string orGroup = "(" + string.Join(" OR ", expansions.Select(e => $"\"{e}\"")) + ")";
-                    resultTerms.Add(orGroup);
-                    continue;
+                    if (PhoneticExpansions.TryGetValue(cleanWord, out var expansions))
+                    {
+                        string orGroup = "(" + string.Join(" OR ", expansions.Select(e => $"\"{e}\"{suffix}")) + ")";
+                        resultTerms.Add(orGroup);
+                        continue;
+                    }
+                    else if (usePrefixMatch && cleanWord.Length >= 4)
+                    {
+                        var prefixMatches = PhoneticExpansions
+                            .Where(kvp => kvp.Key.StartsWith(cleanWord, StringComparison.OrdinalIgnoreCase))
+                            .SelectMany(kvp => kvp.Value)
+                            .Prepend(cleanWord)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
+                        if (prefixMatches.Count > 1)
+                        {
+                            string orGroup = "(" + string.Join(" OR ", prefixMatches.Select(e => $"\"{e}\"*")) + ")";
+                            resultTerms.Add(orGroup);
+                            continue;
+                        }
+                    }
                 }
 
-                // If exact word is requested, or token contains punctuation like hyphen or dot, quote it
-                if (isExactWord || token.Contains('-') || token.Contains('.') || token.Contains(':') || token.Contains('/'))
+                string escapedToken = token.Replace("\"", "\"\"");
+                if (usePrefixMatch)
                 {
-                    resultTerms.Add($"\"{token.Replace("\"", "\"\"")}\"");
+                    resultTerms.Add($"\"{escapedToken}\"*");
+                }
+                else if (isExactWord || token.Contains('-') || token.Contains('.') || token.Contains(':') || token.Contains('/'))
+                {
+                    resultTerms.Add($"\"{escapedToken}\"");
                 }
                 else
                 {

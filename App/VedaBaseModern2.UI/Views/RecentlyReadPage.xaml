@@ -58,13 +58,18 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
+                <StackPanel Grid.Column="0" Spacing="2">
                     <TextBlock Text="CONTINUE READING" Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                     <TextBlock Text="{x:Bind ViewModel.ContinueReadingItem.BookTitle, Mode=OneWay}"
                                Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
                     <TextBlock Text="{x:Bind ViewModel.ContinueReadingItem.Reference, Mode=OneWay}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,2,0,0" />
+                    <TextBlock Text="{x:Bind ViewModel.ContinueReadingItem.Preview, Mode=OneWay}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               FontSize="13" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap"
+                               Margin="0,4,16,0" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Continue" VerticalAlignment="Center"
                         Style="{StaticResource AccentButtonStyle}"
@@ -87,10 +92,11 @@
                   MaxWidth="800" HorizontalAlignment="Stretch">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="models:RecentlyReadItem">
-                    <StackPanel Margin="0,12,0,12" Opacity="{x:Bind DisplayOpacity}">
+                    <StackPanel Margin="0,12,0,12" Spacing="3" Opacity="{x:Bind DisplayOpacity}">
                         <TextBlock Text="{x:Bind BookTitle}" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" FontSize="12" />
-                        <TextBlock Text="{x:Bind Reference}" FontWeight="Bold" FontSize="16" Margin="0,4,0,4" />
-                        <TextBlock Text="{x:Bind LastOpenedDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="{x:Bind Reference}" FontWeight="Bold" FontSize="16" />
+                        <TextBlock Text="{x:Bind Preview}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="13" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />
+                        <TextBlock Text="{x:Bind MetaDisplay}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" FontSize="12" Margin="0,2,0,0" />
                     </StackPanel>
                 </DataTemplate>
             </ListView.ItemTemplate>

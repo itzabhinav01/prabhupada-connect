@@ -81,7 +81,10 @@
         highlightSearchTerms: highlightSearchTerms,
         nextHit: nextHit,
         prevHit: prevHit,
-        clearSearchHits: clearSearchHits
+        clearSearchHits: clearSearchHits,
+        scrollToHighlight: scrollToHighlight,
+        restoreCurrentScroll: restoreCurrentScroll,
+        hasSavedScroll: hasSavedScroll
     };
 
     // Notify C# host that the web engine is initialized and ready
@@ -105,6 +108,7 @@
         const map = {};
         if (!highlights || !Array.isArray(highlights)) return map;
         for (const h of highlights) {
+            h._applied = false;
             const hRecordKey = h.recordKey || h.RecordKey;
             if (targetRecordKey && hRecordKey && hRecordKey !== targetRecordKey) continue;
             const fieldVal = h.field || h.Field || 'Purport';
@@ -113,6 +117,52 @@
             map[f].push(h);
         }
         return map;
+    }
+
+    function resolveHighlightSlot(h) {
+        const rawColor = h.color !== undefined ? h.color : h.Color;
+        let slot = 1;
+        if (typeof rawColor === 'number') {
+            slot = rawColor + 1;
+        } else if (typeof rawColor === 'string') {
+            const lower = rawColor.toLowerCase().trim();
+            if (lower === 'yellow' || lower === 'colour1' || lower === 'colour 1' || lower === 'color 1' || lower === '1') slot = 1;
+            else if (lower === 'green' || lower === 'colour2' || lower === 'colour 2' || lower === 'color 2' || lower === '2') slot = 2;
+            else if (lower === 'blue' || lower === 'colour3' || lower === 'colour 3' || lower === 'color 3' || lower === '3') slot = 3;
+            else {
+                const match = lower.match(/(?:colour|color)?\s*(\d+)/);
+                if (match) slot = parseInt(match[1], 10);
+                else slot = 1;
+            }
+        }
+        return slot;
+    }
+
+    function escapeRegexChars(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function buildFlexibleHighlightPattern(targetStr) {
+        const tokens = targetStr.trim().split(/\s+/).filter(t => t.length > 0);
+        if (tokens.length === 0) return null;
+        const alphaRe = /^[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+$/;
+        let pattern = '';
+        for (let i = 0; i < tokens.length; i++) {
+            const tok = escapeRegexChars(tokens[i]);
+            if (i === 0) {
+                pattern += tok;
+            } else {
+                const prev = tokens[i - 1];
+                const curr = tokens[i];
+                // Allow zero or more spaces when a 1-3 char fragment was healed in OCR (e.g. "p articular" -> "particular")
+                if (prev.length <= 3 && alphaRe.test(prev) && alphaRe.test(curr)) {
+                    pattern += '[\\s\\r\\n]*' + tok;
+                } else {
+                    pattern += '[\\s\\r\\n]+' + tok;
+                }
+            }
+        }
+        return pattern;
     }
 
     function applyHighlights(rawText, fieldHighlights) {
@@ -124,33 +174,167 @@
             const selectedText = h.selectedText || h.SelectedText;
             if (!selectedText || selectedText.trim().length === 0) continue;
             const targetEscaped = escapeHtml(selectedText);
-            const rawColor = h.color !== undefined ? h.color : h.Color;
-            let slot = 1;
-            if (typeof rawColor === 'number') {
-                slot = rawColor + 1;
-            } else if (typeof rawColor === 'string') {
-                const lower = rawColor.toLowerCase().trim();
-                if (lower === 'yellow' || lower === 'colour1' || lower === 'colour 1' || lower === 'color 1' || lower === '1') slot = 1;
-                else if (lower === 'green' || lower === 'colour2' || lower === 'colour 2' || lower === 'color 2' || lower === '2') slot = 2;
-                else if (lower === 'blue' || lower === 'colour3' || lower === 'colour 3' || lower === 'color 3' || lower === '3') slot = 3;
-                else {
-                    const match = lower.match(/(?:colour|color)?\s*(\d+)/);
-                    if (match) slot = parseInt(match[1], 10);
-                    else slot = 1;
-                }
-            }
+            const slot = resolveHighlightSlot(h);
             const id = h.id || h.Id || '';
-            const markTag = `<mark class="hl-mark-colour-${slot}" data-highlight-id="${escapeHtml(id)}" data-slot="${slot}">${targetEscaped}</mark>`;
-            escaped = escaped.split(targetEscaped).join(markTag);
+
+            if (escaped.indexOf(targetEscaped) !== -1) {
+                const markTag = `<mark class="hl-mark-colour-${slot}" data-highlight-id="${escapeHtml(id)}" data-slot="${slot}">${targetEscaped}</mark>`;
+                escaped = escaped.split(targetEscaped).join(markTag);
+                h._applied = true;
+                continue;
+            }
+
+            // Fallback regex for whitespace/newline differences and healed OCR splits
+            const trimmedEscaped = targetEscaped.trim();
+            if (trimmedEscaped.length > 0 && escaped.indexOf(trimmedEscaped) !== -1) {
+                const markTag = `<mark class="hl-mark-colour-${slot}" data-highlight-id="${escapeHtml(id)}" data-slot="${slot}">${trimmedEscaped}</mark>`;
+                escaped = escaped.split(trimmedEscaped).join(markTag);
+                h._applied = true;
+                continue;
+            }
+
+            const flexPattern = buildFlexibleHighlightPattern(targetEscaped);
+            if (flexPattern) {
+                try {
+                    const re = new RegExp(flexPattern, 'g');
+                    let matched = false;
+                    escaped = escaped.replace(re, (m) => {
+                        matched = true;
+                        return `<mark class="hl-mark-colour-${slot}" data-highlight-id="${escapeHtml(id)}" data-slot="${slot}">${m}</mark>`;
+                    });
+                    if (matched) {
+                        h._applied = true;
+                    }
+                } catch (e) { }
+            }
         }
         return escaped;
     }
 
+    function applyRemainingHighlightsToDom(rootContainer, highlights) {
+        if (!rootContainer || !highlights || !Array.isArray(highlights) || highlights.length === 0) return;
+
+        for (const h of highlights) {
+            if (h._applied) continue;
+            const id = h.id || h.Id || '';
+            if (id && rootContainer.querySelector(`mark[data-highlight-id="${CSS.escape ? CSS.escape(id) : id}"]`)) {
+                h._applied = true;
+                continue;
+            }
+
+            const selectedText = (h.selectedText || h.SelectedText || '').trim();
+            if (!selectedText) continue;
+
+            const hRecordKey = h.recordKey || h.RecordKey || '';
+            const hField = h.field || h.Field || '';
+            const slot = resolveHighlightSlot(h);
+
+            let cardEl = hRecordKey ? rootContainer.querySelector(`.verse-card[data-record-key="${hRecordKey}"]`) : rootContainer;
+            if (!cardEl) cardEl = rootContainer;
+
+            let scopeEl = cardEl;
+            if (hField) {
+                const fieldEl = cardEl.querySelector(`[data-field="${hField}"]`);
+                if (fieldEl) scopeEl = fieldEl;
+            }
+
+            if (wrapTextRangeInElement(scopeEl, selectedText, id, slot) ||
+                (scopeEl !== cardEl && wrapTextRangeInElement(cardEl, selectedText, id, slot))) {
+                h._applied = true;
+            }
+        }
+    }
+
+    function wrapTextRangeInElement(container, searchText, highlightId, slot) {
+        if (!container || !searchText) return false;
+
+        const walker = document.createTreeWalker(
+            container,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function (node) {
+                    if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+                    const parent = node.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+                    const tag = parent.tagName.toLowerCase();
+                    if (tag === 'script' || tag === 'style' || tag === 'button') return NodeFilter.FILTER_REJECT;
+                    if (parent.closest('.verse-notes-section, .meter-guide-container')) return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+
+        const textNodes = [];
+        let fullText = '';
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            const start = fullText.length;
+            fullText += node.nodeValue;
+            textNodes.push({ node, start, end: fullText.length });
+        }
+
+        if (!fullText) return false;
+
+        const flexPattern = buildFlexibleHighlightPattern(searchText);
+        if (!flexPattern) return false;
+
+        let match;
+        try {
+            const re = new RegExp(flexPattern, 'i');
+            match = re.exec(fullText);
+        } catch (e) {
+            return false;
+        }
+
+        if (!match) return false;
+
+        const matchStart = match.index;
+        const matchEnd = match.index + match[0].length;
+
+        // Wrap intersecting segments in reverse order so earlier DOM mutations don't invalidate later node references
+        for (let i = textNodes.length - 1; i >= 0; i--) {
+            const info = textNodes[i];
+            if (info.end <= matchStart || info.start >= matchEnd) continue;
+
+            const localStart = Math.max(0, matchStart - info.start);
+            const localEnd = Math.min(info.node.nodeValue.length, matchEnd - info.start);
+            if (localEnd <= localStart) continue;
+
+            const val = info.node.nodeValue;
+            const frag = document.createDocumentFragment();
+            if (localStart > 0) {
+                frag.appendChild(document.createTextNode(val.substring(0, localStart)));
+            }
+            const mark = document.createElement('mark');
+            mark.className = `hl-mark-colour-${slot}`;
+            if (highlightId) mark.setAttribute('data-highlight-id', highlightId);
+            mark.setAttribute('data-slot', String(slot));
+            mark.textContent = val.substring(localStart, localEnd);
+            frag.appendChild(mark);
+            if (localEnd < val.length) {
+                frag.appendChild(document.createTextNode(val.substring(localEnd)));
+            }
+            if (info.node.parentNode) {
+                info.node.parentNode.replaceChild(frag, info.node);
+            }
+        }
+
+        return true;
+    }
+
     function attachHighlightId(id, text) {
         if (!id) return;
+        const pendingMarks = contentEl.querySelectorAll('mark[data-pending-hl="true"]');
+        if (pendingMarks.length > 0) {
+            pendingMarks.forEach(m => {
+                m.dataset.highlightId = id;
+                delete m.dataset.pendingHl;
+            });
+            return;
+        }
         const marks = contentEl.querySelectorAll('mark:not([data-highlight-id]), mark[data-highlight-id=""]');
         for (const m of marks) {
-            if (!text || m.textContent === text) {
+            if (!text || m.textContent === text || m.textContent.trim() === text.trim()) {
                 m.dataset.highlightId = id;
                 break;
             }
@@ -187,6 +371,37 @@
         });
     }
 
+    function buildScriptureAnchor(matchText, targetRef, atPrefix) {
+        if (!matchText) return '';
+        let suffix = '';
+
+        // Strip any trailing whitespace so it is never underlined inside the <a> tag
+        const trailingWs = matchText.match(/\s+$/);
+        if (trailingWs) {
+            suffix = trailingWs[0] + suffix;
+            matchText = matchText.slice(0, -trailingWs[0].length);
+        }
+
+        // If matchText ends with ')' but has no opening '(' inside it (e.g. "(Bg. 18.66)"),
+        // keep the closing ')' outside the hyperlink so outer parentheses stay balanced.
+        if (matchText.endsWith(')') && !matchText.includes('(')) {
+            const closeMatch = matchText.match(/\s*\)$/);
+            if (closeMatch) {
+                suffix = closeMatch[0].trimStart() + suffix;
+                matchText = matchText.slice(0, -closeMatch[0].length);
+            }
+        }
+
+        // Normalize spaces inside balanced parentheses e.g. "( Madhya 19.151 )" -> "(Madhya 19.151)"
+        matchText = matchText
+            .replace(/\(\s+/g, '(')
+            .replace(/\s+\)/g, ')')
+            .replace(/\s+/g, '\u00A0');
+
+        const atClass = atPrefix ? ' at-mention' : '';
+        return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${matchText}</a>${suffix}`;
+    }
+
     function linkifyScriptureReferences(html) {
         if (!html) return '';
         const parts = html.split(/(<[^>]+>)/g);
@@ -195,101 +410,85 @@
             if (!text) continue;
 
             // 1. Bhagavad-gita: "@bg 1.1", "Bhagavad-gītā (4.9)", "Bg. 4.9"
-            text = text.replace(/(@)?(?:Bhagavad[- ]g[īi]t[āa]|Bg\.?)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2}(?:[-–—]\d{1,2})?)\s*\)?)/gi, (m, at, ch, vs) => {
+            text = text.replace(/(@)?(?:Bhagavad[- ]g[īi]t[āa]|Bg\.?)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,3}(?:[-–—]\d{1,3})?)(?:\s*\))?)/gi, (m, at, ch, vs) => {
                 const baseVs = vs.split(/[-–—]/)[0];
-                const targetRef = `BG ${ch}.${baseVs}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+                return buildScriptureAnchor(m, `BG ${ch}.${baseVs}`, at);
             });
 
             // 2. Srimad-Bhagavatam: "@sb 3.4.5", "Śrīmad-Bhāgavatam (1.2.6)", "SB 5.6.6"
-            text = text.replace(/(@)?(?:[ŚS]r[īi]mad[- ]Bh[āa]gavatam|SB|S\.B\.)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,2}(?:[-–—]\d{1,2})?)\s*\)?)/gi, (m, at, canto, ch, vs) => {
+            text = text.replace(/(@)?(?:[ŚS]r[īi]mad[- ]Bh[āa]gavatam|SB|S\.B\.)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,3}(?:[-–—]\d{1,3})?)(?:\s*\))?)/gi, (m, at, canto, ch, vs) => {
                 const baseVs = vs.split(/[-–—]/)[0];
-                const targetRef = `SB ${canto}.${ch}.${baseVs}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+                return buildScriptureAnchor(m, `SB ${canto}.${ch}.${baseVs}`, at);
             });
 
-            // 3. Caitanya-caritamrta: "@cc madhya 2.6", "Cc. Madhya 22.83"
-            text = text.replace(/(@)?(?:Caitanya[- ]carit[āa]m[ṛr]ta|Cc\.?|C\.c\.)\s*(?:(?:[- ]l[īi]l[āa])?\s*)?(?:\(?\s*([ĀA]di|Madhya|Antya)\s*(\d{1,2})[\.:](\d{1,2}(?:[-–—]\d{1,2})?)\s*\)?)/gi, (m, at, lil, ch, vs) => {
+            // 3. Caitanya-caritamrta: "@cc madhya 2.6", "Cc. Madhya 22.83", "Cc. Madhya 19.151"
+            text = text.replace(/(@)?(?:Caitanya[- ]carit[āa]m[ṛr]ta|Cc\.?|C\.c\.)\s*(?:(?:[- ]l[īi]l[āa])?\s*)?(?:\(?\s*([ĀA]di|Madhya|Antya)\s*(\d{1,2})[\.:](\d{1,3}(?:[-–—]\d{1,3})?)(?:\s*\))?)/gi, (m, at, lil, ch, vs) => {
                 const baseVs = vs.split(/[-–—]/)[0];
                 const lilNorm = lil.toLowerCase();
                 const lilKey = lilNorm.includes('ad') ? 'Adi' : (lilNorm.includes('madh') ? 'Madhya' : 'Antya');
-                const targetRef = `CC ${lilKey} ${ch}.${baseVs}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+                return buildScriptureAnchor(m, `CC ${lilKey} ${ch}.${baseVs}`, at);
             });
 
             // 4. Sri Isopanisad: "@iso 1", "Śrī Īśopaniṣad (mantra 1)"
-            text = text.replace(/(@)?(?:[ŚS]r[īi]\s*[ĪI][śs]opani[ṣs]ad|[ĪI][śs]opani[ṣs]ad|Iso\.?)\s*(?:,\s*)?(?:[Mm]antra\s*)?(?:\(?\s*(\d{1,2})\s*\)?)/gi, (m, at, mantra) => {
-                const targetRef = `ISO ${mantra}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+            text = text.replace(/(@)?(?:[ŚS]r[īi]\s*[ĪI][śs]opani[ṣs]ad|[ĪI][śs]opani[ṣs]ad|Iso\.?)\s*(?:,\s*)?(?:[Mm]antra\s*)?(?:\(?\s*(\d{1,2})(?:\s*\))?)/gi, (m, at, mantra) => {
+                return buildScriptureAnchor(m, `ISO ${mantra}`, at);
             });
 
             // 5. Brahma-samhita: "@bs 5.38", "Brahma-saṁhitā (5.38)"
-            text = text.replace(/(@)?(?:Brahma[- ]sa[ṁm]hit[āa]|Bs\.?)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2}(?:[-–—]\d{1,2})?)\s*\)?)/gi, (m, at, ch, vs) => {
+            text = text.replace(/(@)?(?:Brahma[- ]sa[ṁm]hit[āa]|Bs\.?)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,3}(?:[-–—]\d{1,3})?)(?:\s*\))?)/gi, (m, at, ch, vs) => {
                 const baseVs = vs.split(/[-–—]/)[0];
-                const targetRef = `BS ${ch}.${baseVs}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+                return buildScriptureAnchor(m, `BS ${ch}.${baseVs}`, at);
             });
 
             // 6. Nectar of Instruction: "@noi 1", "NOI 1"
-            text = text.replace(/(@)?(?:(?:The\s+)?Nectar of Instruction|Upade[śs][āa]m[ṛr]ta|NOI)\s*(?:,\s*)?(?:(?:[Tt]ext|[Vv]erse)\s*)?(?:\(?\s*(\d{1,2})\s*\)?)/gi, (m, at, vs) => {
-                const targetRef = `NOI ${vs}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+            text = text.replace(/(@)?(?:(?:The\s+)?Nectar of Instruction|Upade[śs][āa]m[ṛr]ta|NOI)\s*(?:,\s*)?(?:(?:[Tt]ext|[Vv]erse)\s*)?(?:\(?\s*(\d{1,2})(?:\s*\))?)/gi, (m, at, vs) => {
+                return buildScriptureAnchor(m, `NOI ${vs}`, at);
             });
 
             // 7. Nectar of Devotion: "@nod 1", "NOD 1"
-            text = text.replace(/(@)?(?:(?:The\s+)?Nectar of Devotion|NOD)\s*(?:,\s*)?(?:(?:[Cc]hapter|[Ss]ection)\s*)?(?:\(?\s*(\d{1,2})\s*\)?)/gi, (m, at, ch) => {
-                const targetRef = `NOD ${ch}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+            text = text.replace(/(@)?(?:(?:The\s+)?Nectar of Devotion|NOD)\s*(?:,\s*)?(?:(?:[Cc]hapter|[Ss]ection)\s*)?(?:\(?\s*(\d{1,2})(?:\s*\))?)/gi, (m, at, ch) => {
+                return buildScriptureAnchor(m, `NOD ${ch}`, at);
             });
 
             // 8. Prabhupada Shlokas: "@sps 10.32", "SPS 10.32"
-            text = text.replace(/(@)?(?:SPS|[ŚS]r[īi]la\s+Prabhup[āa]da\s+[ŚS]lokas|Srila\s+Prabhupada\s+Slokas)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,3})\s*\)?)/gi, (m, at, sec, vs) => {
-                const targetRef = `SPS ${sec}.${vs}`;
-                const atClass = at ? ' at-mention' : '';
-                return `<a class="scripture-link${atClass}" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>`;
+            text = text.replace(/(@)?(?:SPS|[ŚS]r[īi]la\s+Prabhup[āa]da\s+[ŚS]lokas|Srila\s+Prabhupada\s+Slokas)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,3})(?:\s*\))?)/gi, (m, at, sec, vs) => {
+                return buildScriptureAnchor(m, `SPS ${sec}.${vs}`, at);
             });
 
             // 9. Vedanta-sutra quotes outside BG/SB/CC
-            text = text.replace(/(?:Ved[āa]nta[- ]s[ūu]tra)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,2})\s*\)?)/gi, (m, ch, sec, vs) => {
+            text = text.replace(/(?:Ved[āa]nta[- ]s[ūu]tra)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,2})(?:\s*\))?)/gi, (m, ch, sec, vs) => {
                 const key = `${ch}.${sec}.${vs}`;
                 const spsMap = { '1.1.1': 'SPS 9.1', '1.1.2': 'SPS 9.2', '1.1.12': 'SPS 9.3' };
                 const targetRef = spsMap[key];
-                return targetRef ? `<a class="scripture-link" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>` : m;
+                return targetRef ? buildScriptureAnchor(m, targetRef, null) : m;
             });
 
             // 10. Katha Upanisad quotes
-            text = text.replace(/(?:Ka[ṭt]ha\s+Upani[ṣs]ad)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,2})\s*\)?)/gi, (m, ch, sec, vs) => {
+            text = text.replace(/(?:Ka[ṭt]ha\s+Upani[ṣs]ad)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,2})(?:\s*\))?)/gi, (m, ch, sec, vs) => {
                 const key = `${ch}.${sec}.${vs}`;
                 const spsMap = { '1.2.20': 'SPS 10.29', '1.2.23': 'SPS 10.30', '1.3.14': 'SPS 10.31', '2.2.13': 'SPS 10.32' };
                 const targetRef = spsMap[key];
-                return targetRef ? `<a class="scripture-link" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>` : m;
+                return targetRef ? buildScriptureAnchor(m, targetRef, null) : m;
             });
 
             // 11. Svetasvatara Upanisad quotes
-            text = text.replace(/(?:[ŚS]vet[āa][śs]vatara\s+Upani[ṣs]ad)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})\s*\)?)/gi, (m, ch, vs) => {
+            text = text.replace(/(?:[ŚS]vet[āa][śs]vatara\s+Upani[ṣs]ad)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})(?:\s*\))?)/gi, (m, ch, vs) => {
                 const key = `${ch}.${vs}`;
                 const spsMap = { '3.19': 'SPS 10.36', '5.9': 'SPS 10.37', '6.8': 'SPS 10.39', '6.38': 'SPS 10.40' };
                 const targetRef = spsMap[key];
-                return targetRef ? `<a class="scripture-link" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>` : m;
+                return targetRef ? buildScriptureAnchor(m, targetRef, null) : m;
             });
 
             // 12. Mundaka Upanisad quotes
-            text = text.replace(/(?:Mu[ṇn][ḍd]aka\s+Upani[ṣs]ad)\s*(?:\(?\s*(\d{1,2})(?:[\.:](\d{1,2}))?(?:[\.:](\d{1,2}))?\s*\)?)/gi, (m, a, b, c) => {
+            text = text.replace(/(?:Mu[ṇn][ḍd]aka\s+Upani[ṣs]ad)\s*(?:\(?\s*(\d{1,2})(?:[\.:](\d{1,2}))?(?:[\.:](\d{1,2}))?(?:\s*\))?)/gi, (m, a, b, c) => {
                 const key = c ? `${a}.${b}.${c}` : (b ? `${a}.${b}` : a);
                 const spsMap = { '1.2.12': 'SPS 10.33', '1.3': 'SPS 10.34', '3.1.1': 'SPS 10.35' };
                 const targetRef = spsMap[key];
-                return targetRef ? `<a class="scripture-link" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>` : m;
+                return targetRef ? buildScriptureAnchor(m, targetRef, null) : m;
             });
 
             // 13. Bhakti-rasamrta-sindhu quotes
-            text = text.replace(/(?:Bhakti[- ]ras[āa]m[ṛr]ta[- ]sindhu|BRS|B\.R\.S\.)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,3}(?:[-–—]\d{1,3})?)\s*\)?)/gi, (m, a, b, c) => {
+            text = text.replace(/(?:Bhakti[- ]ras[āa]m[ṛr]ta[- ]sindhu|BRS|B\.R\.S\.)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,3}(?:[-–—]\d{1,3})?)(?:\s*\))?)/gi, (m, a, b, c) => {
                 const baseC = c.split(/[-–—]/)[0];
                 const key = `${a}.${b}.${baseC}`;
                 const spsMap = {
@@ -300,23 +499,23 @@
                     '3.2.35': 'SPS 12.13'
                 };
                 const targetRef = spsMap[key];
-                return targetRef ? `<a class="scripture-link" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>` : m;
+                return targetRef ? buildScriptureAnchor(m, targetRef, null) : m;
             });
 
             // 14. Brhan-naradiya Purana quotes
-            text = text.replace(/(?:B[ṛr]han[- ]n[āa]rad[īi]ya\s+Pur[āa][ṇn]a)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,3})\s*\)?)/gi, (m, a, b, c) => {
+            text = text.replace(/(?:B[ṛr]han[- ]n[āa]rad[īi]ya\s+Pur[āa][ṇn]a)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})[\.:](\d{1,3})(?:\s*\))?)/gi, (m, a, b, c) => {
                 const key = `${a}.${b}.${c}`;
                 const spsMap = { '3.8.126': 'SPS 13.4' };
                 const targetRef = spsMap[key];
-                return targetRef ? `<a class="scripture-link" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>` : m;
+                return targetRef ? buildScriptureAnchor(m, targetRef, null) : m;
             });
 
             // 15. Mahabharata Udyoga Parva 71.4
-            text = text.replace(/(?:Mah[āa]bh[āa]rata\s+Udyoga\s+Parva)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})\s*\)?)/gi, (m, a, b) => {
+            text = text.replace(/(?:Mah[āa]bh[āa]rata\s+Udyoga\s+Parva)\s*(?:\(?\s*(\d{1,2})[\.:](\d{1,2})(?:\s*\))?)/gi, (m, a, b) => {
                 const key = `${a}.${b}`;
                 const spsMap = { '71.4': 'SPS 14.5' };
                 const targetRef = spsMap[key];
-                return targetRef ? `<a class="scripture-link" href="#" data-ref="${targetRef}" onclick="reader.onNavigateScripture(event, '${targetRef}')">${m}</a>` : m;
+                return targetRef ? buildScriptureAnchor(m, targetRef, null) : m;
             });
 
             parts[i] = text;
@@ -427,11 +626,17 @@
                 continue;
             }
 
-            if (/^S[ŪU]TRA$/i.test(current)) {
-                if (cleanedParas.length > 0 && cleanedParas[cleanedParas.length - 1].startsWith('### SŪTRA')) {
-                    continue; // drop duplicate bare SŪTRA
+            if (/^(?:S[ŪU]TRA|SYNONYMS|TRANSLATION|PURPORT|TEXT)$/i.test(current)) {
+                if (cleanedParas.length > 0 && cleanedParas[cleanedParas.length - 1].toUpperCase() === `### ${current.toUpperCase()}`) {
+                    continue; // drop duplicate bare header
                 }
-                cleanedParas.push('### SŪTRA');
+                cleanedParas.push(`### ${current}`);
+                continue;
+            }
+
+            // Standalone "NBS 1*", "TEXT 6", "Text No. 13, 14 and 15", "VERSE 1", etc.
+            if (/^(?:NBS|S[ŪU]TRA|TEXT|TEXTS|VERSE|VERSES|MANTRA|MM)\s+(?:No\.\s*)?\d+(?:[\-–—,\s]+(?:and\s+|to\s+)?\d+)*\*?$/i.test(current)) {
+                cleanedParas.push(`### ${current}`);
                 continue;
             }
 
@@ -453,6 +658,22 @@
         }
 
         return cleanedParas.join('\n\n');
+    }
+
+    function emphasizeInlineTextMarkers(html) {
+        if (!html) return '';
+        const parts = html.split(/(<a\b[^>]*>[\s\S]*?<\/a>|<strong\b[^>]*>[\s\S]*?<\/strong>|<[^>]+>)/gi);
+        for (let i = 0; i < parts.length; i += 2) {
+            let seg = parts[i];
+            if (!seg) continue;
+            if (i === 0) {
+                seg = seg.replace(/^(\s*(?:TRANSLATION|PURPORT|SYNONYMS|WORD FOR WORD)\s*:)/i, '<strong class="inline-text-label">$1</strong>');
+            }
+            seg = seg.replace(/\b((?:Texts?|TEXTS?|Verses?|VERSES?|Mantras?|MANTRAS?|Sūtras?|SŪTRAS?|Ślokas?|ŚLOKAS?)\s+(?:No\.\s*)?\d+(?:\s*(?:[\-–—]|and|to|,)\s*\d+)*\*?\s*:?)/g, '<strong class="inline-text-label">$1</strong>');
+            seg = seg.replace(/\b((?:texts?|verses?)\s+\d+(?:\s*[\-–—]\s*\d+)?\s*:)/g, '<strong class="inline-text-label">$1</strong>');
+            parts[i] = seg;
+        }
+        return parts.join('');
     }
 
 
@@ -575,12 +796,22 @@
             .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[\t ]*\r?\n[\t ]*(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3')
             .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
 
-        // 4. Heal stray line-wrap breaks before punctuation: e.g. "India\r\n." -> "India. "
+        // 4. Heal stray line-wrap breaks and spaces inside brackets/parentheses: e.g. "[SB 4.30.20\n]" -> "[SB 4.30.20]"
+        healed = healed
+            .replace(/([\[\(])[ \t]*\r?\n[ \t]*/g, '$1')
+            .replace(/[ \t]*\r?\n[ \t]*([\]\)])/g, '$1')
+            .replace(/([\[\(])[ ]+/g, '$1')
+            .replace(/[ ]+([\]\)])/g, '$1')
+            .replace(/(\(\d+)[ \t]*\r?\n[ \t]*(\d+\))/g, '$1$2')
+            .replace(/(\(\d+\.\d+)[ \t\r\n]+(\d+\))/g, '$1$2')
+            .replace(/(\d+\.)[ \t\r\n]+(\d+\.\d+)/g, '$1$2');
+
+        // 5. Heal stray line-wrap breaks before punctuation: e.g. "India\r\n." -> "India. "
         healed = healed
             .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*([,;:?!])[ \t]*/g, '$1$2 ')
             .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*\.(?!\.)[ \t]*/g, '$1. ');
 
-        // 5. Heal stray whitespace before punctuation: e.g. "Goloka  , on" -> "Goloka, on"
+        // 6. Heal stray whitespace before punctuation: e.g. "Goloka  , on" -> "Goloka, on"
         healed = healed
             .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+([,;:?!])[ \t]*/g, '$1$2 ')
             .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)[ \t]*/g, '$1. ');
@@ -644,7 +875,7 @@
                                 .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)/g, '$1.')
                                 .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
                             let hl = applyHighlights(speechText, fieldHighlights);
-                            hl = linkifyScriptureReferences(hl);
+                            hl = emphasizeInlineTextMarkers(linkifyScriptureReferences(hl));
                             rendered.push(`<p class="conversation-speech"><strong class="speaker-name">${escapeHtml(currentSpeaker)}:</strong> ${hl}</p>`);
                             currentSpeaker = null;
                             currentText = [];
@@ -655,7 +886,7 @@
                                 .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)/g, '$1.')
                                 .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
                             let hl = applyHighlights(normalText, fieldHighlights);
-                            hl = linkifyScriptureReferences(hl);
+                            hl = emphasizeInlineTextMarkers(linkifyScriptureReferences(hl));
                             rendered.push(`<p>${hl}</p>`);
                             currentText = [];
                         }
@@ -684,7 +915,7 @@
                 .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
             const isQuote = /^["“'‘].*["”'’]$/.test(normalized);
             let highlighted = applyHighlights(normalized, fieldHighlights);
-            highlighted = linkifyScriptureReferences(highlighted);
+            highlighted = emphasizeInlineTextMarkers(linkifyScriptureReferences(highlighted));
 
             if (isQuote) {
                 return `<p class="purport-quote">${highlighted}</p>`;
@@ -1364,7 +1595,7 @@
 
         if (intro) {
             html += `
-            <div class="song-intro-block">
+            <div class="song-intro-block" data-field="Purport">
                 ${formatPurportParagraphs(intro, hlMap['purport'] || hlMap['translation'], false, false)}
             </div>
             `;
@@ -1390,13 +1621,13 @@
                         lHtml = linkifyScriptureReferences(lHtml);
                         return `<div class="song-verse-line">${lHtml}</div>`;
                     }).join('');
-                    html += `<div class="song-verse-stanza">${linesHtml}</div>`;
+                    html += `<div class="song-verse-stanza" data-field="Transliteration">${linesHtml}</div>`;
                 }
 
                 if (syns && showSynonyms) {
                     html += `
                     <div class="song-section-label">SYNONYMS</div>
-                    <div class="verse-synonyms song-synonyms">${formatSynonyms(syns, hlMap['synonyms'])}</div>
+                    <div class="verse-synonyms song-synonyms" data-field="Synonyms">${formatSynonyms(syns, hlMap['synonyms'])}</div>
                     `;
                 }
 
@@ -1405,7 +1636,7 @@
                     const showTransLabel = !lines.length && !syns;
                     html += `
                     ${showTransLabel ? `<div class="song-section-label">TRANSLATION</div>` : ''}
-                    <div class="verse-translation song-translation">${transHl}</div>
+                    <div class="verse-translation song-translation" data-field="Translation">${transHl}</div>
                     `;
                 }
 
@@ -1416,7 +1647,7 @@
 
         if (notesText) {
             html += `
-            <div class="song-note-block">
+            <div class="song-note-block" data-field="Purport">
                 ${formatPurportParagraphs(notesText, hlMap['purport'] || hlMap['translation'], false, false)}
             </div>
             `;
@@ -1437,9 +1668,50 @@
         return html;
     }
 
-    // ---- Scroll Reset Engine ----
+    // ---- Scroll Persistence & Reset Engine ----
 
-    function scrollToTop(instant = true) {
+    let scrollToTopTimerIds = [];
+    let currentScrollKey = null;
+    let isProgrammaticScroll = false;
+    const savedScrollPositions = new Map();
+
+    function getSavedScrollOffset(key) {
+        if (!key) return 0;
+        if (savedScrollPositions.has(key)) {
+            return savedScrollPositions.get(key) || 0;
+        }
+        try {
+            const raw = sessionStorage.getItem('vb_scroll_' + key);
+            if (raw !== null) {
+                const parsed = parseFloat(raw);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    savedScrollPositions.set(key, parsed);
+                    return parsed;
+                }
+            }
+        } catch (e) { }
+        return 0;
+    }
+
+    function saveScrollOffset(key, offset) {
+        if (!key) return;
+        const val = Math.max(0, Math.round(offset || 0));
+        savedScrollPositions.set(key, val);
+        try {
+            sessionStorage.setItem('vb_scroll_' + key, String(val));
+        } catch (e) { }
+    }
+
+    function cancelScrollToTop() {
+        for (const tid of scrollToTopTimerIds) {
+            clearTimeout(tid);
+        }
+        scrollToTopTimerIds = [];
+        isProgrammaticScroll = false;
+    }
+
+    function setScrollOffset(topOffset, instant = true) {
+        const y = Math.max(0, Math.round(topOffset || 0));
         try {
             if ('scrollRestoration' in history) {
                 history.scrollRestoration = 'manual';
@@ -1447,49 +1719,76 @@
         } catch (e) { }
 
         try {
-            window.scrollTo({ top: 0, left: 0, behavior: instant ? 'instant' : 'smooth' });
+            window.scrollTo({ top: y, left: 0, behavior: instant ? 'instant' : 'smooth' });
         } catch (e) {
-            window.scrollTo(0, 0);
+            window.scrollTo(0, y);
         }
 
         if (document.scrollingElement) {
-            document.scrollingElement.scrollTop = 0;
+            document.scrollingElement.scrollTop = y;
             document.scrollingElement.scrollLeft = 0;
         }
         if (document.documentElement) {
-            document.documentElement.scrollTop = 0;
+            document.documentElement.scrollTop = y;
             document.documentElement.scrollLeft = 0;
         }
         if (document.body) {
-            document.body.scrollTop = 0;
+            document.body.scrollTop = y;
             document.body.scrollLeft = 0;
         }
         const wrapper = document.getElementById('reader-wrapper');
-        if (wrapper) {
+        if (wrapper && y === 0) {
             wrapper.scrollTop = 0;
         }
-        if (contentEl) {
+        if (contentEl && y === 0) {
             contentEl.scrollTop = 0;
         }
     }
 
-    function forceScrollToTop() {
-        scrollToTop(true);
+    function scrollToTop(instant = true) {
+        setScrollOffset(0, instant);
+    }
+
+    function forceScrollToOffset(topOffset) {
+        cancelScrollToTop();
+        const y = Math.max(0, Math.round(topOffset || 0));
+        isProgrammaticScroll = true;
+        setScrollOffset(y, true);
         requestAnimationFrame(() => {
-            scrollToTop(true);
-            requestAnimationFrame(() => {
-                scrollToTop(true);
-            });
+            if (scrollToTopTimerIds.length > 0) setScrollOffset(y, true);
         });
-        setTimeout(() => {
-            scrollToTop(true);
-        }, 0);
-        setTimeout(() => {
-            scrollToTop(true);
-        }, 25);
-        setTimeout(() => {
-            scrollToTop(true);
-        }, 75);
+        scrollToTopTimerIds.push(setTimeout(() => {
+            setScrollOffset(y, true);
+        }, 0));
+        scrollToTopTimerIds.push(setTimeout(() => {
+            setScrollOffset(y, true);
+        }, 25));
+        scrollToTopTimerIds.push(setTimeout(() => {
+            setScrollOffset(y, true);
+            isProgrammaticScroll = false;
+        }, 85));
+    }
+
+    function forceScrollToTop() {
+        forceScrollToOffset(0);
+    }
+
+    function restoreCurrentScroll() {
+        if (!currentScrollKey) return false;
+        const savedY = getSavedScrollOffset(currentScrollKey);
+        if (savedY > 10) {
+            const currentY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+            if (Math.abs(currentY - savedY) > 10) {
+                forceScrollToOffset(savedY);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    function hasSavedScroll() {
+        if (!currentScrollKey) return false;
+        return getSavedScrollOffset(currentScrollKey) > 10;
     }
 
     // ---- Render Single Verse ----
@@ -1498,7 +1797,11 @@
         if (!record) return;
         stopChantingPulse();
         clearFindSearch();
-        forceScrollToTop();
+
+        const scrollKey = `verse:${record.RecordKey}`;
+        const savedScrollY = getSavedScrollOffset(scrollKey);
+        isProgrammaticScroll = true;
+        currentScrollKey = scrollKey;
 
         const showTranslit = options.showTransliteration !== false;
         const showSynonyms = options.showSynonyms !== false;
@@ -1516,7 +1819,12 @@
 
         if (songData) {
             contentEl.innerHTML = renderSongCardHtml(record, songData, options, hlMap, notes, true);
-            forceScrollToTop();
+            applyRemainingHighlightsToDom(contentEl, highlights);
+            if (savedScrollY > 10) {
+                forceScrollToOffset(savedScrollY);
+            } else {
+                forceScrollToTop();
+            }
             return;
         }
 
@@ -1572,7 +1880,7 @@
 
         if (!isProseRecord && (record.CleanTranslation || record.Translation)) {
             const trans = healBrokenSanskritAndSplits(record.CleanTranslation || record.Translation);
-            const transHighlighted = linkifyScriptureReferences(applyHighlights(trans, hlMap['translation']));
+            const transHighlighted = emphasizeInlineTextMarkers(linkifyScriptureReferences(applyHighlights(trans, hlMap['translation'])));
             html += `
             <div class="section-label">Translation</div>
             <div class="verse-translation" data-field="Translation">${transHighlighted}</div>
@@ -1595,7 +1903,12 @@
 
         html += `</article>`;
         contentEl.innerHTML = html;
-        forceScrollToTop();
+        applyRemainingHighlightsToDom(contentEl, highlights);
+        if (savedScrollY > 10) {
+            forceScrollToOffset(savedScrollY);
+        } else {
+            forceScrollToTop();
+        }
     }
 
     // ---- Render Continuous Chapter ----
@@ -1604,7 +1917,12 @@
         if (!records || !Array.isArray(records)) return;
         stopChantingPulse();
         clearFindSearch();
-        forceScrollToTop();
+
+        const firstKey = (records.length > 0 && records[0].RecordKey) ? records[0].RecordKey : chapterTitle;
+        const scrollKey = `chapter:${firstKey}`;
+        const savedScrollY = getSavedScrollOffset(scrollKey);
+        isProgrammaticScroll = true;
+        currentScrollKey = scrollKey;
 
         const showTranslit = options.showTransliteration !== false;
         const showSynonyms = options.showSynonyms !== false;
@@ -1697,7 +2015,7 @@
 
             if (!isProseRecord && (record.CleanTranslation || record.Translation)) {
                 const trans = healBrokenSanskritAndSplits(record.CleanTranslation || record.Translation);
-                const transHighlighted = linkifyScriptureReferences(applyHighlights(trans, hlMap['translation']));
+                const transHighlighted = emphasizeInlineTextMarkers(linkifyScriptureReferences(applyHighlights(trans, hlMap['translation'])));
                 html += `
                 <div class="section-label">Translation</div>
                 <div class="verse-translation" data-field="Translation">${transHighlighted}</div>
@@ -1722,7 +2040,12 @@
         }
 
         contentEl.innerHTML = html;
-        forceScrollToTop();
+        applyRemainingHighlightsToDom(contentEl, highlights);
+        if (savedScrollY > 10) {
+            forceScrollToOffset(savedScrollY);
+        } else {
+            forceScrollToTop();
+        }
     }
 
     function scrollToVerse(refOrKey) {
@@ -1745,11 +2068,68 @@
             if (el === contentEl.firstElementChild || Math.abs(el.getBoundingClientRect().top) < 150) {
                 forceScrollToTop();
             } else {
+                cancelScrollToTop();
                 el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
         } else {
             forceScrollToTop();
         }
+    }
+
+    function scrollToHighlight(highlightId, selectedText, field, recordKey) {
+        cancelScrollToTop();
+
+        let targetMark = null;
+        if (highlightId) {
+            targetMark = contentEl.querySelector(`mark[data-highlight-id="${CSS.escape ? CSS.escape(highlightId) : highlightId}"]`);
+        }
+
+        if (!targetMark && selectedText) {
+            const normTarget = selectedText.replace(/\s+/g, ' ').trim().toLowerCase();
+            const marks = contentEl.querySelectorAll('mark[data-slot]');
+            for (const m of marks) {
+                const normMark = (m.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if (normMark === normTarget || normTarget.includes(normMark) || normMark.includes(normTarget)) {
+                    targetMark = m;
+                    break;
+                }
+            }
+        }
+
+        if (!targetMark && selectedText) {
+            let scopeEl = contentEl;
+            if (recordKey) {
+                const card = contentEl.querySelector(`.verse-card[data-record-key="${recordKey}"]`);
+                if (card) scopeEl = card;
+            }
+            if (field) {
+                const fEl = scopeEl.querySelector(`[data-field="${field}"]`);
+                if (fEl) scopeEl = fEl;
+            }
+            wrapTextRangeInElement(scopeEl, selectedText, highlightId || '', 1);
+            if (highlightId) {
+                targetMark = contentEl.querySelector(`mark[data-highlight-id="${CSS.escape ? CSS.escape(highlightId) : highlightId}"]`);
+            }
+            if (!targetMark) {
+                targetMark = scopeEl.querySelector('mark[data-slot]');
+            }
+        }
+
+        if (targetMark) {
+            setTimeout(() => {
+                cancelScrollToTop();
+                targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetMark.style.transition = 'outline 0.25s ease, box-shadow 0.25s ease';
+                targetMark.style.outline = '2px solid var(--accent-color, #D4AF37)';
+                targetMark.style.boxShadow = '0 0 12px rgba(212, 175, 55, 0.65)';
+                setTimeout(() => {
+                    targetMark.style.outline = '';
+                    targetMark.style.boxShadow = '';
+                }, 2400);
+            }, 40);
+            return true;
+        }
+        return false;
     }
 
     // Focus verse clicked in chapter view
@@ -2170,6 +2550,7 @@
             mark.className = colorClass;
             mark.dataset.color = color;
             mark.dataset.slot = String(slot);
+            mark.dataset.pendingHl = 'true';
             try {
                 range.surroundContents(mark);
             } catch (ex) {
@@ -2230,20 +2611,177 @@
         currentSelectionInfo = null;
     });
 
-    // Existing highlight click to remove or Sanskrit word click for concordance
-    contentEl.addEventListener('click', (e) => {
-        const mark = e.target.closest('mark[data-highlight-id]');
-        if (mark && mark.dataset.highlightId) {
-            const hlId = mark.dataset.highlightId;
-            notifyHost({ action: 'remove_highlight', highlightId: hlId });
-            const parent = mark.parentNode;
-            if (parent) {
-                parent.replaceChild(document.createTextNode(mark.textContent), mark);
-                parent.normalize();
-            }
-            return;
-        }
+    // ---- Highlight Right-Click Context Menu ----
+    let activeHighlightContextMenu = null;
 
+    function hideHighlightContextMenu() {
+        if (activeHighlightContextMenu) {
+            activeHighlightContextMenu.remove();
+            activeHighlightContextMenu = null;
+        }
+    }
+
+    function inferSlotFromMark(mark) {
+        if (!mark) return 1;
+        if (mark.dataset.slot) {
+            const parsed = parseInt(mark.dataset.slot, 10);
+            if (!isNaN(parsed) && parsed >= 1) return parsed;
+        }
+        const cls = mark.className || '';
+        const match = cls.match(/hl-mark-colour-?(\d+)/i);
+        if (match) return parseInt(match[1], 10);
+        if (cls.includes('green')) return 2;
+        if (cls.includes('blue')) return 3;
+        return 1;
+    }
+
+    function getHighlightMarks(targetMark, hlId) {
+        if (hlId) {
+            const selector = `mark[data-highlight-id="${CSS.escape ? CSS.escape(hlId) : hlId}"]`;
+            const found = Array.from(contentEl.querySelectorAll(selector));
+            if (found.length > 0) return found;
+        }
+        return targetMark ? [targetMark] : [];
+    }
+
+    function unwrapMarkElement(mark) {
+        const parent = mark.parentNode;
+        if (!parent) return;
+        while (mark.firstChild) {
+            parent.insertBefore(mark.firstChild, mark);
+        }
+        parent.removeChild(mark);
+        parent.normalize();
+    }
+
+    function showHighlightContextMenu(targetMark, clientX, clientY) {
+        hideHighlightContextMenu();
+        hideToolbar();
+        hideLexiconCard();
+
+        const hlId = targetMark.dataset.highlightId || '';
+        const currentSlot = inferSlotFromMark(targetMark);
+
+        const menu = document.createElement('div');
+        menu.className = 'highlight-context-menu';
+
+        const colorHeader = document.createElement('div');
+        colorHeader.className = 'hl-ctx-label';
+        colorHeader.textContent = 'Change Color';
+        menu.appendChild(colorHeader);
+
+        const swatchesRow = document.createElement('div');
+        swatchesRow.className = 'hl-ctx-swatches';
+
+        _activeHighlightPalette.forEach(p => {
+            const slot = p.slot !== undefined ? p.slot : p.Slot;
+            const hex = p.hexColor || p.HexColor || '#E6A122';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `hl-ctx-swatch hl-colour-${slot}${slot === currentSlot ? ' active' : ''}`;
+            btn.title = `Colour ${slot}`;
+            btn.style.backgroundColor = hex;
+            if (slot === currentSlot) {
+                btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+            }
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const marks = getHighlightMarks(targetMark, hlId);
+                marks.forEach(m => {
+                    m.className = (m.className || '')
+                        .replace(/\bhl-mark-(colour-?\d+|yellow|green|blue)\b/g, '')
+                        .trim();
+                    m.classList.add(`hl-mark-colour-${slot}`);
+                    m.dataset.slot = String(slot);
+                    m.dataset.color = `Colour${slot}`;
+                });
+                if (hlId) {
+                    notifyHost({
+                        action: 'update_highlight_color',
+                        highlightId: hlId,
+                        color: `Colour${slot}`
+                    });
+                }
+                hideHighlightContextMenu();
+            });
+            swatchesRow.appendChild(btn);
+        });
+        menu.appendChild(swatchesRow);
+
+        const divider = document.createElement('div');
+        divider.className = 'hl-ctx-divider';
+        menu.appendChild(divider);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'hl-ctx-remove-btn';
+        removeBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>
+            <span>Remove Highlight</span>
+        `;
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const marks = getHighlightMarks(targetMark, hlId);
+            marks.forEach(m => unwrapMarkElement(m));
+            if (hlId) {
+                notifyHost({ action: 'remove_highlight', highlightId: hlId });
+            }
+            hideHighlightContextMenu();
+        });
+        menu.appendChild(removeBtn);
+
+        document.body.appendChild(menu);
+        activeHighlightContextMenu = menu;
+
+        const menuWidth = menu.offsetWidth || 180;
+        const menuHeight = menu.offsetHeight || 100;
+        const pad = 10;
+        const left = Math.max(pad, Math.min(window.innerWidth - menuWidth - pad, clientX));
+        const top = Math.max(pad, Math.min(window.innerHeight - menuHeight - pad, clientY));
+
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.top = `${Math.round(top)}px`;
+    }
+
+    contentEl.addEventListener('contextmenu', (e) => {
+        const mark = e.target.closest('mark[data-highlight-id], mark[class*="hl-mark-"]');
+        if (mark && !mark.classList.contains('find-match') && !mark.classList.contains('search-hit')) {
+            e.preventDefault();
+            e.stopPropagation();
+            showHighlightContextMenu(mark, e.clientX, e.clientY);
+        }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+        if (activeHighlightContextMenu && !activeHighlightContextMenu.contains(e.target)) {
+            hideHighlightContextMenu();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && activeHighlightContextMenu) {
+            hideHighlightContextMenu();
+        }
+    });
+
+    window.addEventListener('scroll', () => {
+        if (activeHighlightContextMenu) {
+            hideHighlightContextMenu();
+        }
+        if (isProgrammaticScroll || !currentScrollKey) return;
+        if (document.hidden || window.innerHeight < 50 || !contentEl || contentEl.offsetHeight < 50) return;
+        const y = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        saveScrollOffset(currentScrollKey, y);
+    }, { passive: true });
+
+    // Sanskrit word click for concordance (left-clicking a highlight no longer deletes it)
+    contentEl.addEventListener('click', (e) => {
         const sanskritWord = e.target.closest('.sanskrit-word');
         if (sanskritWord) {
             e.stopPropagation();
@@ -3230,6 +3768,35 @@
         });
     }
 
+    function buildIastAwarePattern(word) {
+        const iastMap = {
+            'a': '[aā]',
+            'i': '[iī]',
+            'u': '[uū]',
+            'r': '[rṛṝ]',
+            'l': '[lḷḹ]',
+            'e': '[eē]',
+            'o': '[oō]',
+            'm': '[mṁṃ]',
+            'h': '[hḥ]',
+            'n': '[nñṅṇ]',
+            't': '[tṭ]',
+            'd': '[dḍ]',
+            's': '[sśṣ]h?'
+        };
+        let out = '';
+        for (let i = 0; i < word.length; i++) {
+            const ch = word[i];
+            const lower = ch.toLowerCase();
+            if (iastMap[lower]) {
+                out += iastMap[lower];
+            } else {
+                out += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+        }
+        return out;
+    }
+
     function highlightSearchTerms(rawQuery) {
         clearSearchHits();
         if (!rawQuery || typeof rawQuery !== 'string') return;
@@ -3237,12 +3804,12 @@
         // Extract individual search words (strip operators and punctuation)
         const cleaned = rawQuery.replace(/NEAR\([^)]+\)/gi, '')
                                 .replace(/\b(AND|OR|NOT|w\/\d+|near\/\d+)\b/gi, ' ')
-                                .replace(/["'():]/g, ' ');
+                                .replace(/["'():*]/g, ' ');
         const words = cleaned.split(/\s+/).map(w => w.trim()).filter(w => w.length >= 2);
         if (words.length === 0) return;
 
-        // Escape regex special chars
-        const escaped = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        // Build IAST-diacritic-aware regex pattern so ASCII searches (e.g. "namamisva") highlight "namāmīśva"
+        const escaped = words.map(w => buildIastAwarePattern(w));
         const pattern = new RegExp(`(${escaped.join('|')})`, 'gi');
 
         const walker = document.createTreeWalker(
@@ -3311,6 +3878,9 @@
 
     function updateActiveHit(scrollIntoView = true) {
         if (searchHitElements.length === 0) return;
+        if (scrollIntoView) {
+            cancelScrollToTop();
+        }
         searchHitElements.forEach((el, idx) => {
             if (idx === currentHitIndex) {
                 el.classList.add('active-hit');

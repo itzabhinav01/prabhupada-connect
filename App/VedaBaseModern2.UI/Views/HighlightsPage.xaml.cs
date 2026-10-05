@@ -46,20 +46,12 @@ namespace VedaBaseModern.UI.Views
         {
             if (e.AddedItems.Count > 0 && e.AddedItems[0] is HighlightListItem item)
             {
-                // Phase 4.9.4: a precision (non-legacy) highlight carries its
-                // exact Field + character range - navigate straight to that
-                // passage instead of just the chapter start. A legacy
-                // (Phase 4.6) block-level highlight has no such range (-1
-                // sentinel), so it falls back to plain RecordKey navigation
-                // exactly as before.
-                if (!item.IsLegacyBlockLevel && item.StartOffset >= 0 && item.Length > 0)
-                {
-                    this.Frame.Navigate(typeof(ReadingPage), new HighlightNavigationTarget(item.RecordKey, item.Field, item.StartOffset, item.Length));
-                }
-                else
-                {
-                    this.Frame.Navigate(typeof(ReadingPage), item.RecordKey);
-                }
+                var target = new HighlightNavigationTarget(
+                    item.RecordKey,
+                    item.Field ?? string.Empty,
+                    Math.Max(0, item.StartOffset),
+                    Math.Max(1, item.Length));
+                this.Frame.Navigate(typeof(ReadingPage), target);
             }
             if (sender is ListView lv) lv.SelectedItem = null;
         }

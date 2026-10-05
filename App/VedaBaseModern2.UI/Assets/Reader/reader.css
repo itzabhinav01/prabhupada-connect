@@ -1,12 +1,12 @@
 :root {
-    --bg-color: #121212;
-    --text-primary: #E0E0E0;
-    --text-secondary: #9E9E9E;
+    --bg-color: #0F281E;
+    --text-primary: #F2F4F3;
+    --text-secondary: #A8BDB4;
     --text-tertiary: #757575;
-    --accent-color: #E5A93C;
+    --accent-color: #D4AF37;
     --accent-hover: #F5B041;
     --color-sanskrit-verse: #F5C542; /* Luminous warm golden yellow for distinct sacred Sanskrit/Bengali chanting text */
-    --card-bg: #1E1E1E;
+    --card-bg: #16382A;
     --card-border: rgba(255, 255, 255, 0.08);
     --selection-bg: rgba(229, 169, 60, 0.35);
 
@@ -33,6 +33,8 @@
     margin: 0;
     padding: 0;
     -webkit-tap-highlight-color: transparent;
+    font-variant-numeric: lining-nums;
+    font-feature-settings: "lnum" 1;
 }
 
 html {
@@ -49,6 +51,8 @@ body {
     background-color: var(--bg-color);
     color: var(--text-primary);
     font-family: var(--font-family-serif);
+    font-variant-numeric: lining-nums;
+    font-feature-settings: "lnum" 1;
     font-size: 16px;
     line-height: 1.6;
     overflow-x: hidden;
@@ -255,6 +259,11 @@ body {
     letter-spacing: -0.01em;
 }
 
+.inline-text-label {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
 /* Section Labels (Synonyms, Translation, Purport) - Centered Dignified Serif like vedabase.io */
 .section-label {
     text-align: center;
@@ -379,6 +388,11 @@ body {
 
 /* Scripture citation hyperlinks matching vedabase.io */
 .scripture-link {
+    display: inline-block;
+    text-indent: 0;
+    text-align: left;
+    white-space: nowrap;
+    word-spacing: normal;
     color: var(--accent-color);
     font-style: italic;
     font-weight: 500;
@@ -520,6 +534,94 @@ mark.find-match.active {
 
 .tool-btn:hover {
     background: rgba(255, 255, 255, 0.12);
+}
+
+/* Highlight Right-Click Context Menu */
+.highlight-context-menu {
+    position: fixed;
+    z-index: 1200;
+    min-width: 176px;
+    padding: 10px 12px;
+    background: rgba(26, 26, 26, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    user-select: none;
+    animation: fadeInPopover 0.12s ease-out;
+}
+
+.hl-ctx-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.6);
+    font-family: system-ui, -apple-system, sans-serif;
+    padding: 0 2px;
+}
+
+.hl-ctx-swatches {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 2px 4px 2px;
+}
+
+.hl-ctx-swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hl-ctx-swatch:hover {
+    transform: scale(1.15);
+    border-color: rgba(255, 255, 255, 0.85);
+}
+
+.hl-ctx-swatch.active {
+    border-color: #FFFFFF;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+.hl-ctx-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 2px 0;
+}
+
+.hl-ctx-remove-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #FF8A80;
+    font-size: 13px;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    text-align: left;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.hl-ctx-remove-btn:hover {
+    background: rgba(255, 82, 82, 0.18);
+    color: #FF5252;
 }
 
 /* Custom Scrollbar */

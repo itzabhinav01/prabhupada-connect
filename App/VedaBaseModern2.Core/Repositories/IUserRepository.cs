@@ -92,7 +92,7 @@ namespace VedaBaseModern.Core.Repositories
         Task ClearHistoryAsync();
 
         // Search user content (Notes and Bookmarks)
-        Task<List<UserSearchResult>> SearchUserContentAsync(string query);
+        Task<List<UserSearchResult>> SearchUserContentAsync(string query, bool isExactWord = false);
 
         // Sync Metadata & Local Device Identity (Phase 3: Migration 10)
         Task<string?> GetSyncMetadataAsync(string key);

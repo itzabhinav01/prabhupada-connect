@@ -199,17 +199,26 @@ namespace VedaBaseModern.UI.Views
         {
             if (e.AddedItems.Count > 0 && e.AddedItems[0] is SearchResult result)
             {
-                // Phase 4.9.4: a highlight match carries the exact Field +
-                // character range it was found in - navigate straight to that
-                // passage instead of just the chapter start.
+                string tabTitle = !string.IsNullOrWhiteSpace(result.Reference) ? result.Reference : result.RecordKey;
+                object navTarget;
+
                 if (result.Category == "Highlight" && !string.IsNullOrEmpty(result.Field) && result.StartOffset >= 0 && result.Length > 0)
                 {
-                    this.Frame.Navigate(typeof(ReadingPage), new HighlightNavigationTarget(result.RecordKey, result.Field, result.StartOffset, result.Length));
+                    navTarget = new HighlightNavigationTarget(result.RecordKey, result.Field, result.StartOffset, result.Length);
                 }
                 else
                 {
                     // Pass search query so the reader activates the in-document hit navigation HUD
-                    this.Frame.Navigate(typeof(ReadingPage), new SearchResultNavigationTarget(result.RecordKey, ViewModel.SearchText));
+                    navTarget = new SearchResultNavigationTarget(result.RecordKey, ViewModel.SearchText);
+                }
+
+                if (MainPage.Current != null)
+                {
+                    MainPage.Current.CreateNewTab(tabTitle, "\uE8A5", typeof(ReadingPage), navTarget);
+                }
+                else
+                {
+                    this.Frame.Navigate(typeof(ReadingPage), navTarget);
                 }
             }
 

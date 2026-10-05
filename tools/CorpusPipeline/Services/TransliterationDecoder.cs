@@ -29,11 +29,17 @@ namespace VedaBaseModern.CorpusPipeline.Services
                        .Replace("\\'91", "‘").Replace("\\'92", "’")
                        .Replace("\\'93", "\"").Replace("\\'94", "\"");
 
-            text = text.Replace("\\line", "\n").Replace("\\par", "");
+            // In RTF, raw \r and \n are physical 80-col file wraps, EXCEPT when followed by 2+ spaces (indented verse stanza lines).
+            text = Regex.Replace(text, @"\r?\n[ \t]{2,}", "\\line ");
+            text = text.Replace("\r", "").Replace("\n", "");
+
+            text = text.Replace("\\line", "\n").Replace("\\par", "\n");
             text = Regex.Replace(text, "\\\\\\*[a-zA-Z]+(\\d+)?", ""); 
             text = Regex.Replace(text, "\\\\[a-zA-Z]+(-?[0-9]+)? ?", ""); 
             text = Regex.Replace(text, "\\\\'[0-9a-fA-F]{2}", ""); 
             text = text.Replace("{", "").Replace("}", "");
+            text = Regex.Replace(text, @"[ \t]{2,}", " ");
+            text = Regex.Replace(text, @" *\n *", "\n");
 
             return text.Trim();
         }

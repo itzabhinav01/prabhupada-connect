@@ -62,6 +62,31 @@ namespace VedaBaseModern.UI.ViewModels
                     RecentlyReadItem item;
                     if (recordsByKey.TryGetValue(h.RecordKey, out var record))
                     {
+                        string rawRef = string.IsNullOrWhiteSpace(record.Reference) ? record.RecordKey : record.Reference!.Trim();
+                        if (rawRef.Contains(','))
+                        {
+                            var parts = rawRef.Split(',').Select(p => p.Trim()).Where(p => !string.IsNullOrEmpty(p)).ToArray();
+                            string? rangePart = parts.FirstOrDefault(p => (p.Contains('–') || p.Contains('-')) && !System.Text.RegularExpressions.Regex.IsMatch(p, @"^19[6-8]\d$"));
+                            rawRef = rangePart ?? parts[0];
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(record.Title) &&
+                            !rawRef.Contains(record.Title, StringComparison.OrdinalIgnoreCase))
+                        {
+                            rawRef = $"{rawRef} — {record.Title.Trim()}";
+                        }
+
+                        string previewSource = !string.IsNullOrWhiteSpace(record.Translation)
+                            ? record.Translation!
+                            : (record.PurportParagraphs != null && record.PurportParagraphs.Count > 0
+                                ? record.PurportParagraphs[0]
+                                : (record.Transliteration ?? string.Empty));
+                        string cleanPreview = System.Text.RegularExpressions.Regex.Replace(previewSource, @"\s+", " ").Trim();
+                        if (cleanPreview.Length > 180)
+                        {
+                            cleanPreview = cleanPreview.Substring(0, 177) + "...";
+                        }
+
                         item = new RecentlyReadItem
                         {
                             RecordKey = h.RecordKey,
@@ -70,8 +95,9 @@ namespace VedaBaseModern.UI.ViewModels
                             IsAvailable = true,
                             BookKey = record.BookKey,
                             BookTitle = _corpusRepository.GetBookTitle(record.BookKey),
-                            Reference = string.IsNullOrWhiteSpace(record.Reference) ? record.RecordKey : record.Reference!,
-                            Title = record.Title
+                            Reference = rawRef,
+                            Title = record.Title,
+                            Preview = cleanPreview
                         };
                     }
                     else

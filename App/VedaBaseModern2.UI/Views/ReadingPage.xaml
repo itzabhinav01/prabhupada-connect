@@ -198,7 +198,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- Right Pane Header: Mode Switcher & Close -->
-                <Grid Grid.Row="0" Padding="12,8" Background="{ThemeResource NavigationViewDefaultPaneBackground}"
+                <Grid x:Name="RightPaneHeaderGrid" Grid.Row="0" Padding="12,8" Background="{ThemeResource NavigationViewDefaultPaneBackground}"
                       BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -236,7 +236,7 @@
                     </Grid.RowDefinitions>
 
                     <!-- Scripture Search & Paging Bar -->
-                    <Grid Grid.Row="0" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Grid x:Name="ParallelSearchHeaderGrid" Grid.Row="0" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                           BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

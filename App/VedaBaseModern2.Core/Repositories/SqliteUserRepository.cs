@@ -1183,12 +1183,12 @@ namespace VedaBaseModern.Core.Repositories
             });
         }
 
-        public async Task<List<UserSearchResult>> SearchUserContentAsync(string query)
+        public async Task<List<UserSearchResult>> SearchUserContentAsync(string query, bool isExactWord = false)
         {
             var results = new List<UserSearchResult>();
             if (string.IsNullOrWhiteSpace(query)) return results;
 
-            string parsedQuery = Services.FtsQueryParser.Parse(query);
+            string parsedQuery = Services.FtsQueryParser.Parse(query, isExactWord);
             if (string.IsNullOrWhiteSpace(parsedQuery)) return results;
 
             await Task.Run(() =>

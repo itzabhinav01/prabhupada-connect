@@ -24,11 +24,22 @@ namespace VedaBaseModern.UI.Views
         public ReadingViewModel ViewModel { get; }
 
         private bool _isWebReady;
+        private int _syncVersion;
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _findDebounceTimer;
         private int _findTotalMatches;
         private int _findActiveMatchIndex = -1;
         private List<JsonElement> _findMatchList = new();
         private string? _pendingSearchQuery;
+        private HighlightNavigationTarget? _pendingHighlightTarget;
+        private string? _lastSyncedContentSignature;
+
+        private string GetCurrentContentSignature()
+        {
+            if (ViewModel == null) return string.Empty;
+            string recKey = ViewModel.CurrentRecord?.RecordKey ?? string.Empty;
+            int chapCount = ViewModel.IsContinuousChapter ? (ViewModel.ChapterRecords?.Count ?? 0) : 0;
+            return $"{recKey}|{ViewModel.IsContinuousChapter}|{chapCount}|{ViewModel.ShowTransliteration}|{ViewModel.ShowSynonyms}|{ViewModel.ShowPurport}|{ViewModel.ShowPronunciationGuide}";
+        }
 
         public ReadingPage()
         {
@@ -144,7 +155,17 @@ namespace VedaBaseModern.UI.Views
                 ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             }
             await EnsureWebViewInitializedAsync();
-            SyncContentToWeb();
+            if (ViewModel != null && !ViewModel.IsLoading && !string.IsNullOrEmpty(ViewModel.CurrentRecord?.RecordKey))
+            {
+                if (_isWebReady && ReaderWebView?.CoreWebView2 != null &&
+                    !string.IsNullOrEmpty(_lastSyncedContentSignature) &&
+                    _lastSyncedContentSignature == GetCurrentContentSignature())
+                {
+                    _ = ReaderWebView.ExecuteScriptAsync("window.reader && window.reader.restoreCurrentScroll && window.reader.restoreCurrentScroll();");
+                    return;
+                }
+                SyncContentToWeb();
+            }
         }
 
         private void ReadingPage_Unloaded(object sender, RoutedEventArgs e)
@@ -166,29 +187,42 @@ namespace VedaBaseModern.UI.Views
                 ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             }
 
-            string? targetKey = e.Parameter switch
+            string? targetKey = null;
+            bool recordHistory = true;
+            if (e.Parameter is string key)
             {
-                string key => key,
-                HighlightNavigationTarget hl => hl.RecordKey,
-                SearchResultNavigationTarget sr => (_pendingSearchQuery = sr.SearchQuery) != null ? sr.RecordKey : sr.RecordKey,
-                _ => null
-            };
-
-            await EnsureWebViewInitializedAsync();
-
-            if (ViewModel != null)
+                targetKey = key;
+            }
+            else if (e.Parameter is ValueTuple<string, bool> resumeTuple)
             {
-                if (!string.IsNullOrEmpty(targetKey))
-                {
-                    await ViewModel.LoadRecordAsync(targetKey);
-                }
-                else if (string.IsNullOrEmpty(ViewModel.CurrentRecord?.RecordKey))
-                {
-                    // Default to first verse of Bhagavad-gītā
-                    await ViewModel.LoadRecordAsync("BG-1-1");
-                }
+                targetKey = resumeTuple.Item1;
+                recordHistory = resumeTuple.Item2;
+            }
+            else if (e.Parameter is HighlightNavigationTarget hl)
+            {
+                _pendingHighlightTarget = hl;
+                targetKey = hl.RecordKey;
+            }
+            else if (e.Parameter is SearchResultNavigationTarget sr)
+            {
+                _pendingSearchQuery = sr.SearchQuery;
+                targetKey = sr.RecordKey;
             }
 
+            string effectiveKey = !string.IsNullOrEmpty(targetKey)
+                ? targetKey
+                : (string.IsNullOrEmpty(ViewModel?.CurrentRecord?.RecordKey) ? "BG-1-1" : "");
+
+            if (ViewModel != null && !string.IsNullOrEmpty(effectiveKey))
+            {
+                var initTask = EnsureWebViewInitializedAsync();
+                var loadTask = ViewModel.LoadRecordAsync(effectiveKey, recordHistory);
+                await Task.WhenAll(initTask, loadTask);
+                SyncContentToWeb();
+                return;
+            }
+
+            await EnsureWebViewInitializedAsync();
             SyncContentToWeb();
         }
 
@@ -262,7 +296,7 @@ namespace VedaBaseModern.UI.Views
                     }
 
                     coreWebView2.SetVirtualHostNameToFolderMapping(
-                        "reader.local",
+                        "reader.example",
                         assetsFolder,
                         CoreWebView2HostResourceAccessKind.Allow);
 
@@ -275,8 +309,8 @@ namespace VedaBaseModern.UI.Views
                     coreWebView2.NewWindowRequested -= CoreWebView2_NewWindowRequested;
                     coreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
 
-                    LogDebug("Navigating to https://reader.local/reader.html");
-                    coreWebView2.Navigate("https://reader.local/reader.html");
+                    LogDebug("Navigating to https://reader.example/reader.html?v=20261005a");
+                    coreWebView2.Navigate("https://reader.example/reader.html?v=20261005a");
                     return; // Success!
                 }
                 catch (System.Runtime.InteropServices.COMException comEx) when (
@@ -319,12 +353,13 @@ namespace VedaBaseModern.UI.Views
         private void CoreWebView2_NavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             LogDebug($"NavigationCompleted: success={e.IsSuccess}, errorStatus={e.WebErrorStatus}");
-            if (e.IsSuccess)
+            if (e.IsSuccess && !_isWebReady)
             {
                 _isWebReady = true;
                 SyncThemeToWeb();
                 SyncHighlightPaletteToWeb();
                 SyncBrightnessToWeb();
+                SyncFontSizesToWeb();
                 SyncContentToWeb();
             }
         }
@@ -359,11 +394,15 @@ namespace VedaBaseModern.UI.Views
                         break;
 
                     case "ready":
-                        _isWebReady = true;
-                        SyncThemeToWeb();
-                        SyncHighlightPaletteToWeb();
-                        SyncBrightnessToWeb();
-                        SyncContentToWeb();
+                        if (!_isWebReady)
+                        {
+                            _isWebReady = true;
+                            SyncThemeToWeb();
+                            SyncHighlightPaletteToWeb();
+                            SyncBrightnessToWeb();
+                            SyncFontSizesToWeb();
+                            SyncContentToWeb();
+                        }
                         break;
 
                     case "open_web_tab":
@@ -460,6 +499,16 @@ namespace VedaBaseModern.UI.Views
                         if (!string.IsNullOrEmpty(hlId))
                         {
                             await App.Current.UserRepository.RemoveHighlightAsync(hlId);
+                        }
+                        break;
+
+                    case "update_highlight_color":
+                        string updHlId = doc.RootElement.GetProperty("highlightId").GetString() ?? "";
+                        string updColorStr = doc.RootElement.GetProperty("color").GetString() ?? "Colour1";
+                        if (!string.IsNullOrEmpty(updHlId))
+                        {
+                            var newColor = HighlightColorHelper.Parse(updColorStr);
+                            await App.Current.UserRepository.UpdateHighlightColorAsync(updHlId, newColor);
                         }
                         break;
 
@@ -592,16 +641,17 @@ namespace VedaBaseModern.UI.Views
             if (e.PropertyName == nameof(ViewModel.IsContinuousChapter))
             {
                 UpdateViewModeButton();
-                SyncContentToWeb();
             }
-            else if (e.PropertyName == nameof(ViewModel.CurrentRecord) ||
-                     e.PropertyName == nameof(ViewModel.ChapterRecords) ||
-                     e.PropertyName == nameof(ViewModel.ShowTransliteration) ||
+            else if (e.PropertyName == nameof(ViewModel.ShowTransliteration) ||
                      e.PropertyName == nameof(ViewModel.ShowSynonyms) ||
                      e.PropertyName == nameof(ViewModel.ShowPurport) ||
                      e.PropertyName == nameof(ViewModel.ShowPronunciationGuide))
             {
                 SyncContentToWeb();
+                if (_isParallelWebReady && _parallelCurrentRecord != null)
+                {
+                    _ = RenderParallelRecordAsync(_parallelCurrentRecord);
+                }
             }
         }
 
@@ -622,6 +672,18 @@ namespace VedaBaseModern.UI.Views
             }
         }
 
+        private static string FormatCleanTabHeader(CorpusRecord rec)
+        {
+            string rawRef = !string.IsNullOrWhiteSpace(rec.Reference) ? rec.Reference : rec.RecordKey;
+            if (rawRef.Contains(','))
+            {
+                var parts = rawRef.Split(',').Select(p => p.Trim()).Where(p => !string.IsNullOrEmpty(p)).ToArray();
+                string? rangePart = parts.FirstOrDefault(p => (p.Contains('–') || p.Contains('-')) && !System.Text.RegularExpressions.Regex.IsMatch(p, @"^19[6-8]\d$"));
+                rawRef = rangePart ?? parts[0];
+            }
+            return rawRef;
+        }
+
         private async void SyncContentToWeb()
         {
             LogDebug($"SyncContentToWeb called: _isWebReady={_isWebReady}, CoreWebView2!=null={ReaderWebView?.CoreWebView2 != null}, CurrentRecord={ViewModel.CurrentRecord?.RecordKey}, IsContinuous={ViewModel.IsContinuousChapter}");
@@ -629,6 +691,14 @@ namespace VedaBaseModern.UI.Views
             {
                 return;
             }
+
+            if (ViewModel.CurrentRecord != null && !string.IsNullOrEmpty(ViewModel.CurrentRecord.RecordKey))
+            {
+                MainPage.Current?.UpdateTabHeaderForContent(this, FormatCleanTabHeader(ViewModel.CurrentRecord), "\uE8A5");
+            }
+
+            int mySyncVersion = ++_syncVersion;
+            List<Highlight> activeHighlights = new();
 
             try
             {
@@ -641,6 +711,8 @@ namespace VedaBaseModern.UI.Views
                 };
                 string optionsJson = JsonSerializer.Serialize(options);
 
+                bool hasPendingTarget = _pendingHighlightTarget != null || !string.IsNullOrEmpty(_pendingSearchQuery);
+
                 if (ViewModel.IsContinuousChapter && ViewModel.ChapterRecords != null && ViewModel.ChapterRecords.Count > 0)
                 {
                     string recordsJson = JsonSerializer.Serialize(ViewModel.ChapterRecords);
@@ -649,8 +721,12 @@ namespace VedaBaseModern.UI.Views
 
                     var keys = ViewModel.ChapterRecords.Select(r => r.RecordKey).ToList();
                     var highlights = await ViewModel.GetHighlightsForChapterAsync(keys);
+                    if (mySyncVersion != _syncVersion) return;
+                    activeHighlights = highlights;
+
                     string hlJson = JsonSerializer.Serialize(highlights);
                     var notes = await ViewModel.GetNotesForChapterAsync(keys);
+                    if (mySyncVersion != _syncVersion) return;
                     string notesJson = JsonSerializer.Serialize(notes);
 
                     LogDebug($"Executing renderChapter for {ViewModel.ChapterRecords.Count} records");
@@ -662,20 +738,18 @@ namespace VedaBaseModern.UI.Views
                             'RENDER_ERROR: ' + e.message + ' at ' + e.stack;
                         }}";
                     string res = await ReaderWebView.ExecuteScriptAsync(chapterScript);
+                    if (mySyncVersion != _syncVersion) return;
+                    _lastSyncedContentSignature = GetCurrentContentSignature();
                     LogDebug($"renderChapter executed, result={res}");
 
-                    // Scroll to active verse inside continuous chapter
-                    if (ViewModel.CurrentRecord != null && !string.IsNullOrEmpty(ViewModel.CurrentRecord.RecordKey))
+                    // Scroll to active verse inside continuous chapter unless a saved scroll offset or highlight/search target is active
+                    if (!hasPendingTarget && ViewModel.CurrentRecord != null && !string.IsNullOrEmpty(ViewModel.CurrentRecord.RecordKey))
                     {
                         string refKey = ViewModel.CurrentRecord.RecordKey;
                         var firstKey = ViewModel.ChapterRecords?.FirstOrDefault()?.RecordKey;
-                        if (!string.IsNullOrEmpty(firstKey) && refKey == firstKey)
+                        if (!string.IsNullOrEmpty(firstKey) && refKey != firstKey)
                         {
-                            await ReaderWebView.ExecuteScriptAsync("reader.scrollToTop();");
-                        }
-                        else
-                        {
-                            await ReaderWebView.ExecuteScriptAsync($"reader.scrollToVerse('{refKey}');");
+                            await ReaderWebView.ExecuteScriptAsync($"window.reader && (!window.reader.hasSavedScroll || !window.reader.hasSavedScroll()) && window.reader.scrollToVerse('{refKey}');");
                         }
                     }
                 }
@@ -683,8 +757,12 @@ namespace VedaBaseModern.UI.Views
                 {
                     string recordJson = JsonSerializer.Serialize(ViewModel.CurrentRecord);
                     var highlights = await ViewModel.GetHighlightsForRecordAsync(ViewModel.CurrentRecord.RecordKey);
+                    if (mySyncVersion != _syncVersion) return;
+                    activeHighlights = highlights;
+
                     string hlJson = JsonSerializer.Serialize(highlights);
                     var notes = await ViewModel.GetNotesForRecordAsync(ViewModel.CurrentRecord.RecordKey);
+                    if (mySyncVersion != _syncVersion) return;
                     string notesJson = JsonSerializer.Serialize(notes);
 
                     LogDebug($"Executing renderVerse for {ViewModel.CurrentRecord.RecordKey}");
@@ -696,14 +774,42 @@ namespace VedaBaseModern.UI.Views
                             'RENDER_ERROR: ' + e.message + ' at ' + e.stack;
                         }}";
                     string res = await ReaderWebView.ExecuteScriptAsync(verseScript);
+                    if (mySyncVersion != _syncVersion) return;
+                    _lastSyncedContentSignature = GetCurrentContentSignature();
                     LogDebug($"renderVerse executed, result={res}");
-                    _ = ReaderWebView.ExecuteScriptAsync("window.reader && window.reader.scrollToTop && window.reader.scrollToTop();");
                 }
             }
             catch (Exception ex)
             {
                 LogDebug($"SyncContentToWeb Error: {ex}");
                 System.Diagnostics.Debug.WriteLine($"[ReadingPage] SyncContentToWeb Error: {ex}");
+            }
+
+            if (mySyncVersion != _syncVersion) return;
+
+            if (_pendingHighlightTarget != null)
+            {
+                var hlTarget = _pendingHighlightTarget;
+                _pendingHighlightTarget = null;
+
+                var matchedHl = activeHighlights.FirstOrDefault(h =>
+                                    string.Equals(h.RecordKey, hlTarget.RecordKey, StringComparison.OrdinalIgnoreCase) &&
+                                    string.Equals(h.Field, hlTarget.Field, StringComparison.OrdinalIgnoreCase) &&
+                                    h.StartOffset == hlTarget.StartOffset &&
+                                    h.Length == hlTarget.Length)
+                                ?? activeHighlights.FirstOrDefault(h =>
+                                    string.Equals(h.RecordKey, hlTarget.RecordKey, StringComparison.OrdinalIgnoreCase) &&
+                                    string.Equals(h.Field, hlTarget.Field, StringComparison.OrdinalIgnoreCase))
+                                ?? activeHighlights.FirstOrDefault(h =>
+                                    string.Equals(h.RecordKey, hlTarget.RecordKey, StringComparison.OrdinalIgnoreCase));
+
+                string hlId = matchedHl?.Id ?? "";
+                string hlText = matchedHl?.SelectedText ?? "";
+                string hlField = matchedHl?.Field ?? hlTarget.Field ?? "";
+                string hlRecKey = hlTarget.RecordKey ?? "";
+
+                _ = ReaderWebView?.ExecuteScriptAsync(
+                    $"window.reader && window.reader.scrollToHighlight({JsonSerializer.Serialize(hlId)}, {JsonSerializer.Serialize(hlText)}, {JsonSerializer.Serialize(hlField)}, {JsonSerializer.Serialize(hlRecKey)});");
             }
 
             if (!string.IsNullOrEmpty(_pendingSearchQuery))
@@ -745,10 +851,34 @@ namespace VedaBaseModern.UI.Views
             }
         }
 
+        private static Windows.UI.Color ParseHexColor(string hex, Windows.UI.Color fallback)
+        {
+            if (string.IsNullOrWhiteSpace(hex)) return fallback;
+            string s = hex.Trim().TrimStart('#');
+            try
+            {
+                if (s.Length == 6)
+                {
+                    byte r = Convert.ToByte(s.Substring(0, 2), 16);
+                    byte g = Convert.ToByte(s.Substring(2, 2), 16);
+                    byte b = Convert.ToByte(s.Substring(4, 2), 16);
+                    return Windows.UI.Color.FromArgb(255, r, g, b);
+                }
+                if (s.Length == 8)
+                {
+                    byte a = Convert.ToByte(s.Substring(0, 2), 16);
+                    byte r = Convert.ToByte(s.Substring(2, 2), 16);
+                    byte g = Convert.ToByte(s.Substring(4, 2), 16);
+                    byte b = Convert.ToByte(s.Substring(6, 2), 16);
+                    return Windows.UI.Color.FromArgb(a, r, g, b);
+                }
+            }
+            catch { }
+            return fallback;
+        }
+
         private async void SyncThemeToWeb(AppTheme? explicitTheme = null)
         {
-            if (!_isWebReady || ReaderWebView?.CoreWebView2 == null) return;
-
             bool isDark;
             bool isCustom = false;
             AppTheme themeToUse;
@@ -788,6 +918,7 @@ namespace VedaBaseModern.UI.Views
             string accentColor;
             string cardBackground;
             string cardBorder;
+            string paneBgColor;
 
             if (isCustom && CustomThemeService.ActiveCustomTheme is { } custom)
             {
@@ -797,6 +928,7 @@ namespace VedaBaseModern.UI.Views
                 accentColor = custom.AccentColor;
                 cardBackground = custom.CardBackground;
                 cardBorder = custom.DividerColor;
+                paneBgColor = !string.IsNullOrWhiteSpace(custom.CardBackground) ? custom.CardBackground : custom.PageBackground;
             }
             else
             {
@@ -806,7 +938,51 @@ namespace VedaBaseModern.UI.Views
                 accentColor = isDark ? "#D4AF37" : "#9B6818";
                 cardBackground = isDark ? "#16382A" : "#F7DCAF";
                 cardBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+                paneBgColor = isDark ? "#0B1E16" : "#EBCA96";
             }
+
+            // Synchronize Split View XAML containers with active theme
+            try
+            {
+                var pageBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ParseHexColor(bgColor, Windows.UI.Color.FromArgb(255, 15, 40, 30)));
+                var cardBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ParseHexColor(cardBackground, Windows.UI.Color.FromArgb(255, 22, 56, 42)));
+                var paneBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ParseHexColor(paneBgColor, Windows.UI.Color.FromArgb(255, 11, 30, 22)));
+                var borderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    isDark ? Windows.UI.Color.FromArgb(32, 255, 255, 255) : Windows.UI.Color.FromArgb(32, 0, 0, 0));
+
+                if (RightPaneContainer != null)
+                {
+                    RightPaneContainer.Background = pageBrush;
+                    RightPaneContainer.BorderBrush = borderBrush;
+                }
+                if (RightPaneHeaderGrid != null)
+                {
+                    RightPaneHeaderGrid.Background = paneBrush;
+                    RightPaneHeaderGrid.BorderBrush = borderBrush;
+                }
+                if (ParallelSearchHeaderGrid != null)
+                {
+                    ParallelSearchHeaderGrid.Background = cardBrush;
+                    ParallelSearchHeaderGrid.BorderBrush = borderBrush;
+                }
+                if (SideNotebookPanel != null)
+                {
+                    SideNotebookPanel.Background = pageBrush;
+                }
+                if (SplitterBorder != null)
+                {
+                    SplitterBorder.Background = borderBrush;
+                }
+                if (ParallelWebView?.CoreWebView2 != null)
+                {
+                    ParallelWebView.DefaultBackgroundColor = ParseHexColor(bgColor, Windows.UI.Color.FromArgb(255, 15, 40, 30));
+                }
+                if (ReaderWebView?.CoreWebView2 != null)
+                {
+                    ReaderWebView.DefaultBackgroundColor = ParseHexColor(bgColor, Windows.UI.Color.FromArgb(255, 15, 40, 30));
+                }
+            }
+            catch { }
 
             var themeObj = new
             {
@@ -819,18 +995,31 @@ namespace VedaBaseModern.UI.Views
             };
 
             string themeJson = JsonSerializer.Serialize(themeObj);
-            await ReaderWebView.ExecuteScriptAsync($"reader.setTheme({themeJson});");
+            if (_isWebReady && ReaderWebView?.CoreWebView2 != null)
+            {
+                await ReaderWebView.ExecuteScriptAsync($"reader.setTheme({themeJson});");
+            }
+            if (_isParallelWebReady && ParallelWebView?.CoreWebView2 != null)
+            {
+                await ParallelWebView.ExecuteScriptAsync($"reader.setTheme({themeJson});");
+            }
         }
 
         private async void SyncHighlightPaletteToWeb()
         {
-            if (!_isWebReady || ReaderWebView?.CoreWebView2 == null) return;
             try
             {
                 var settings = await App.Current.SettingsService.GetSettingsAsync();
                 var palette = settings.HighlightPalette ?? HighlightColorHelper.CreateDefaultPalette();
                 string json = JsonSerializer.Serialize(palette);
-                await ReaderWebView.ExecuteScriptAsync($"reader.setHighlightPalette({json});");
+                if (_isWebReady && ReaderWebView?.CoreWebView2 != null)
+                {
+                    await ReaderWebView.ExecuteScriptAsync($"reader.setHighlightPalette({json});");
+                }
+                if (_isParallelWebReady && ParallelWebView?.CoreWebView2 != null)
+                {
+                    await ParallelWebView.ExecuteScriptAsync($"reader.setHighlightPalette({json});");
+                }
             }
             catch (Exception ex)
             {
@@ -840,15 +1029,21 @@ namespace VedaBaseModern.UI.Views
 
         private async void SyncBrightnessToWeb()
         {
-            if (!_isWebReady || ReaderWebView?.CoreWebView2 == null) return;
             var pref = App.Current.ReadingPreferencesService?.ActivePreferences;
             int brightness = pref?.TextBrightness ?? 100;
-            await ReaderWebView.ExecuteScriptAsync($"reader.setTextBrightness({brightness});");
+            if (_isWebReady && ReaderWebView?.CoreWebView2 != null)
+            {
+                await ReaderWebView.ExecuteScriptAsync($"reader.setTextBrightness({brightness});");
+            }
+            if (_isParallelWebReady && ParallelWebView?.CoreWebView2 != null)
+            {
+                await ParallelWebView.ExecuteScriptAsync($"reader.setTextBrightness({brightness});");
+            }
         }
 
         private async void SyncFontSizesToWeb()
         {
-            if (!_isWebReady || ReaderWebView?.CoreWebView2 == null || ViewModel == null) return;
+            if (ViewModel == null) return;
             var sizes = new
             {
                 verse = Math.Round(ViewModel.DevanagariFontSize),
@@ -858,7 +1053,14 @@ namespace VedaBaseModern.UI.Views
                 purport = Math.Round(ViewModel.PurportFontSize)
             };
             string json = JsonSerializer.Serialize(sizes);
-            await ReaderWebView.ExecuteScriptAsync($"reader.setFontSizes({json});");
+            if (_isWebReady && ReaderWebView?.CoreWebView2 != null)
+            {
+                await ReaderWebView.ExecuteScriptAsync($"reader.setFontSizes({json});");
+            }
+            if (_isParallelWebReady && ParallelWebView?.CoreWebView2 != null)
+            {
+                await ParallelWebView.ExecuteScriptAsync($"reader.setFontSizes({json});");
+            }
         }
 
         // ---- Top Bar Actions ----
@@ -1079,11 +1281,10 @@ namespace VedaBaseModern.UI.Views
                 if (bookNode == null) return;
 
                 var flyout = new Flyout();
-                var rootPanel = new StackPanel { Width = 310, MaxHeight = 440, Spacing = 8 };
+                var rootPanel = new StackPanel { Width = 330, MaxHeight = 460, Spacing = 8, RequestedTheme = this.ActualTheme };
 
                 var headerText = new TextBlock
                 {
-                    Text = segment.IsLast ? "Jump to Verse" : "Jump to Chapter / Section",
                     FontWeight = Microsoft.UI.Text.FontWeights.Bold,
                     FontSize = 14
                 };
@@ -1101,10 +1302,16 @@ namespace VedaBaseModern.UI.Views
                 {
                     SelectionMode = ListViewSelectionMode.None,
                     IsItemClickEnabled = true,
-                    MaxHeight = 320
+                    MaxHeight = 340
                 };
 
-                // Populate based on whether segment is book level (Index == 0), verse level (IsLast), or chapter level
+                var currentRecKey = ViewModel.CurrentRecord?.RecordKey ?? "";
+                var currentChapter = bookNode.Chapters.FirstOrDefault(c => c.Records.Any(r => r.RecordKey == currentRecKey))
+                                     ?? bookNode.Chapters.FirstOrDefault();
+
+                string upperBook = bookKey.ToUpperInvariant();
+                var segments = ViewModel.BreadcrumbSegments;
+
                 if (segment.Index == 0)
                 {
                     headerText.Text = "Jump to Book";
@@ -1112,8 +1319,8 @@ namespace VedaBaseModern.UI.Views
                     void PopulateBooks(string filter)
                     {
                         var filtered = string.IsNullOrWhiteSpace(filter)
-                            ? hierarchy.Where(b => !b.IsHeader && !b.IsFolder).ToList()
-                            : hierarchy.Where(b => !b.IsHeader && !b.IsFolder && b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                            ? hierarchy.Where(b => !b.IsHeader && !b.IsFolder && !b.IsPdf).ToList()
+                            : hierarchy.Where(b => !b.IsHeader && !b.IsFolder && !b.IsPdf && b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
 
                         itemsListView.ItemsSource = filtered.Select(b => new BreadcrumbNavTarget
                         {
@@ -1126,15 +1333,203 @@ namespace VedaBaseModern.UI.Views
                     PopulateBooks("");
                     searchBox.TextChanged += (s, ev) => PopulateBooks(searchBox.Text);
                 }
-                else if (segment.IsLast && bookNode.Chapters.Count > 0)
+                else if (upperBook == "SB" && segment.Index == 1)
                 {
-                    headerText.Text = "Jump to Verse";
+                    headerText.Text = "Jump to Canto";
+                    var cantoGroups = bookNode.Chapters
+                        .Select(c =>
+                        {
+                            var firstKey = c.Records.FirstOrDefault()?.RecordKey ?? "";
+                            var parts = firstKey.Split('-');
+                            int cantoNum = (parts.Length >= 2 && int.TryParse(parts[1], out int cn)) ? cn : 1;
+                            return new { Chapter = c, CantoNum = cantoNum };
+                        })
+                        .GroupBy(x => x.CantoNum)
+                        .OrderBy(g => g.Key)
+                        .Select(g => new BreadcrumbNavTarget
+                        {
+                            Title = $"Canto {g.Key}",
+                            SubTitle = $"{g.Count()} chapters",
+                            RecordKey = g.First().Chapter.Records.FirstOrDefault()?.RecordKey ?? ""
+                        })
+                        .Where(x => !string.IsNullOrEmpty(x.RecordKey))
+                        .ToList();
 
-                    var currentRecKey = ViewModel.CurrentRecord?.RecordKey ?? "";
-                    var currentChapter = bookNode.Chapters.FirstOrDefault(c => c.Records.Any(r => r.RecordKey == currentRecKey))
-                                         ?? bookNode.Chapters.FirstOrDefault();
+                    void PopulateCantos(string filter)
+                    {
+                        itemsListView.ItemsSource = string.IsNullOrWhiteSpace(filter)
+                            ? cantoGroups
+                            : cantoGroups.Where(x => x.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                    }
 
-                    var recordsToDisplay = currentChapter != null ? currentChapter.Records : new List<RecordNode>();
+                    PopulateCantos("");
+                    searchBox.TextChanged += (s, ev) => PopulateCantos(searchBox.Text);
+                }
+                else if (upperBook == "SB" && segment.Index == 2 && (!segment.IsLast || (currentChapter != null && currentChapter.Records.Count <= 1)))
+                {
+                    var keyParts = currentRecKey.Split('-');
+                    string currentCanto = (keyParts.Length >= 2 && int.TryParse(keyParts[1], out _)) ? keyParts[1] : "1";
+                    headerText.Text = $"Jump to Chapter (Canto {currentCanto})";
+
+                    var cantoChapters = bookNode.Chapters.Where(c =>
+                    {
+                        var firstKey = c.Records.FirstOrDefault()?.RecordKey ?? "";
+                        var parts = firstKey.Split('-');
+                        return parts.Length >= 2 && parts[1].Equals(currentCanto, StringComparison.OrdinalIgnoreCase);
+                    }).ToList();
+
+                    if (cantoChapters.Count == 0) cantoChapters = bookNode.Chapters;
+
+                    void PopulateCantoChapters(string filter)
+                    {
+                        var filtered = string.IsNullOrWhiteSpace(filter)
+                            ? cantoChapters
+                            : cantoChapters.Where(c => c.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                        itemsListView.ItemsSource = filtered.Select(c =>
+                        {
+                            string cleanTitle = System.Text.RegularExpressions.Regex.Replace(c.Title, $@"^Canto\s+{currentCanto}\s*-\s*", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            return new BreadcrumbNavTarget
+                            {
+                                Title = cleanTitle,
+                                SubTitle = c.HasMultipleRecords ? $"{c.Records.Count} verses" : "Front Matter / Chapter",
+                                RecordKey = c.Records.FirstOrDefault()?.RecordKey ?? ""
+                            };
+                        }).Where(x => !string.IsNullOrEmpty(x.RecordKey)).ToList();
+                    }
+
+                    PopulateCantoChapters("");
+                    searchBox.TextChanged += (s, ev) => PopulateCantoChapters(searchBox.Text);
+                }
+                else if ((upperBook == "DI" || upperBook == "MADHYA" || upperBook == "ANTYA" || upperBook == "CC") && segment.Index == 1)
+                {
+                    headerText.Text = "Jump to Līlā";
+                    var lilaKeys = new[] { "DI", "MADHYA", "ANTYA" };
+                    var lilaGroups = lilaKeys
+                        .Select(lk => hierarchy.FirstOrDefault(b => b.BookKey.Equals(lk, StringComparison.OrdinalIgnoreCase)))
+                        .Where(b => b != null)
+                        .Select(b => new BreadcrumbNavTarget
+                        {
+                            Title = b!.BookKey.ToUpperInvariant() switch
+                            {
+                                "DI" => "Ādi-līlā",
+                                "MADHYA" => "Madhya-līlā",
+                                "ANTYA" => "Antya-līlā",
+                                _ => b.Title
+                            },
+                            SubTitle = $"{b.Chapters.Count} chapters",
+                            RecordKey = b.Chapters.FirstOrDefault()?.Records.FirstOrDefault()?.RecordKey ?? ""
+                        })
+                        .Where(x => !string.IsNullOrEmpty(x.RecordKey))
+                        .ToList();
+
+                    void PopulateLilas(string filter)
+                    {
+                        itemsListView.ItemsSource = string.IsNullOrWhiteSpace(filter)
+                            ? lilaGroups
+                            : lilaGroups.Where(x => x.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                    }
+
+                    PopulateLilas("");
+                    searchBox.TextChanged += (s, ev) => PopulateLilas(searchBox.Text);
+                }
+                else if ((upperBook == "DI" || upperBook == "MADHYA" || upperBook == "ANTYA" || upperBook == "CC") && segment.Index == 2 && (!segment.IsLast || (currentChapter != null && currentChapter.Records.Count <= 1)))
+                {
+                    string lilaDisplay = upperBook switch
+                    {
+                        "DI" => "Ādi-līlā",
+                        "MADHYA" => "Madhya-līlā",
+                        "ANTYA" => "Antya-līlā",
+                        _ => "Līlā"
+                    };
+                    headerText.Text = $"Jump to Chapter ({lilaDisplay})";
+
+                    var lilaChapters = bookNode.Chapters;
+
+                    void PopulateLilaChapters(string filter)
+                    {
+                        var filtered = string.IsNullOrWhiteSpace(filter)
+                            ? lilaChapters
+                            : lilaChapters.Where(c => c.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                        itemsListView.ItemsSource = filtered.Select(c => new BreadcrumbNavTarget
+                        {
+                            Title = c.Title,
+                            SubTitle = c.HasMultipleRecords ? $"{c.Records.Count} verses" : "Chapter reading",
+                            RecordKey = c.Records.FirstOrDefault()?.RecordKey ?? ""
+                        }).Where(x => !string.IsNullOrEmpty(x.RecordKey)).ToList();
+                    }
+
+                    PopulateLilaChapters("");
+                    searchBox.TextChanged += (s, ev) => PopulateLilaChapters(searchBox.Text);
+                }
+                else if (upperBook == "BB" && segment.Index == 1 && segments.Count >= 4)
+                {
+                    headerText.Text = "Jump to Part";
+                    var partGroups = bookNode.Chapters
+                        .Select(c =>
+                        {
+                            var firstKey = c.Records.FirstOrDefault()?.RecordKey ?? "";
+                            var parts = firstKey.Split('-');
+                            string partNum = parts.Length >= 2 ? parts[1] : "1";
+                            return new { Chapter = c, PartNum = partNum };
+                        })
+                        .GroupBy(x => x.PartNum)
+                        .Select(g => new BreadcrumbNavTarget
+                        {
+                            Title = $"Part {g.Key}",
+                            SubTitle = $"{g.Count()} chapters",
+                            RecordKey = g.First().Chapter.Records.FirstOrDefault()?.RecordKey ?? ""
+                        })
+                        .Where(x => !string.IsNullOrEmpty(x.RecordKey))
+                        .ToList();
+
+                    void PopulateParts(string filter)
+                    {
+                        itemsListView.ItemsSource = string.IsNullOrWhiteSpace(filter)
+                            ? partGroups
+                            : partGroups.Where(x => x.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                    }
+
+                    PopulateParts("");
+                    searchBox.TextChanged += (s, ev) => PopulateParts(searchBox.Text);
+                }
+                else if (upperBook == "BB" && segment.Index == 2 && !segment.IsLast)
+                {
+                    var keyParts = currentRecKey.Split('-');
+                    string currentPart = keyParts.Length >= 2 ? keyParts[1] : "1";
+                    headerText.Text = $"Jump to Chapter (Part {currentPart})";
+
+                    var partChapters = bookNode.Chapters.Where(c =>
+                    {
+                        var firstKey = c.Records.FirstOrDefault()?.RecordKey ?? "";
+                        var parts = firstKey.Split('-');
+                        return parts.Length >= 2 && parts[1].Equals(currentPart, StringComparison.OrdinalIgnoreCase);
+                    }).ToList();
+
+                    if (partChapters.Count == 0) partChapters = bookNode.Chapters;
+
+                    void PopulatePartChapters(string filter)
+                    {
+                        var filtered = string.IsNullOrWhiteSpace(filter)
+                            ? partChapters
+                            : partChapters.Where(c => c.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                        itemsListView.ItemsSource = filtered.Select(c => new BreadcrumbNavTarget
+                        {
+                            Title = c.Title,
+                            SubTitle = c.HasMultipleRecords ? $"{c.Records.Count} verses" : "Chapter reading",
+                            RecordKey = c.Records.FirstOrDefault()?.RecordKey ?? ""
+                        }).Where(x => !string.IsNullOrEmpty(x.RecordKey)).ToList();
+                    }
+
+                    PopulatePartChapters("");
+                    searchBox.TextChanged += (s, ev) => PopulatePartChapters(searchBox.Text);
+                }
+                else if (segment.IsLast && currentChapter != null && currentChapter.Records.Count > 1)
+                {
+                    headerText.Text = (upperBook == "SVA" || upperBook == "TMG") ? "Jump to Song" : "Jump to Verse";
+                    var recordsToDisplay = currentChapter.Records;
 
                     void PopulateVerses(string filter)
                     {
@@ -1166,7 +1561,7 @@ namespace VedaBaseModern.UI.Views
                         itemsListView.ItemsSource = filtered.Select(c => new BreadcrumbNavTarget
                         {
                             Title = c.Title,
-                            SubTitle = c.HasMultipleRecords ? $"{c.Records.Count} verses" : "Chapter reading",
+                            SubTitle = c.HasMultipleRecords ? $"{c.Records.Count} {(upperBook == "SVA" || upperBook == "TMG" ? "songs" : "verses")}" : "Chapter reading",
                             RecordKey = c.Records.FirstOrDefault()?.RecordKey ?? ""
                         }).Where(x => !string.IsNullOrEmpty(x.RecordKey)).ToList();
                     }
@@ -1321,12 +1716,19 @@ namespace VedaBaseModern.UI.Views
                 LeftPaneCol.Width = new GridLength(1, GridUnitType.Star);
                 RightPaneCol.Width = new GridLength(1, GridUnitType.Star);
 
+                // Ensure split view container and webview follow the active theme immediately
+                SyncThemeToWeb();
+
                 if (ParallelScripturePanel.Visibility == Visibility.Visible)
                 {
                     await EnsureParallelWebViewInitializedAsync();
                     if (_parallelCurrentRecord == null)
                     {
                         await LoadDefaultParallelRecordAsync();
+                    }
+                    else
+                    {
+                        SyncParallelTheme();
                     }
                 }
                 else
@@ -1356,6 +1758,10 @@ namespace VedaBaseModern.UI.Views
             if (_parallelCurrentRecord == null)
             {
                 await LoadDefaultParallelRecordAsync();
+            }
+            else
+            {
+                SyncParallelTheme();
             }
         }
 
@@ -1394,8 +1800,17 @@ namespace VedaBaseModern.UI.Views
                 var coreWebView2 = ParallelWebView.CoreWebView2;
                 if (coreWebView2 == null) return;
 
+                if (this.ActualTheme == ElementTheme.Dark)
+                {
+                    ParallelWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 15, 40, 30);
+                }
+                else
+                {
+                    ParallelWebView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, 243, 212, 165);
+                }
+
                 coreWebView2.SetVirtualHostNameToFolderMapping(
-                    "reader.local",
+                    "reader.example",
                     assetsFolder,
                     Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
 
@@ -1426,7 +1841,7 @@ namespace VedaBaseModern.UI.Views
                     catch { }
                 };
 
-                coreWebView2.Navigate("https://reader.local/reader.html");
+                coreWebView2.Navigate("https://reader.example/reader.html");
             }
             catch (Exception ex)
             {
@@ -1455,6 +1870,7 @@ namespace VedaBaseModern.UI.Views
                 {
                     _parallelCurrentRecord = record;
                     ParallelVerseSuggestBox.Text = !string.IsNullOrWhiteSpace(record.Reference) ? record.Reference : record.RecordKey;
+                    await App.Current.UserRepository.RecordHistoryAsync(record.RecordKey);
                     await RenderParallelRecordAsync(record);
                 }
             }
@@ -1481,12 +1897,16 @@ namespace VedaBaseModern.UI.Views
                     showPurport = ViewModel.ShowPurport,
                     showPronunciationGuide = ViewModel.ShowPronunciationGuide
                 };
+                var parallelHighlights = await App.Current.UserRepository.GetHighlightsAsync(record.RecordKey);
+                var parallelNotes = await App.Current.UserRepository.GetNotesAsync(record.RecordKey);
                 string optionsJson = JsonSerializer.Serialize(options);
                 string recordJson = JsonSerializer.Serialize(record);
+                string highlightsJson = JsonSerializer.Serialize(parallelHighlights);
+                string notesJson = JsonSerializer.Serialize(parallelNotes);
 
                 string script = $@"
                     try {{
-                        reader.renderVerse(JSON.parse({JsonSerializer.Serialize(recordJson)}), JSON.parse({JsonSerializer.Serialize(optionsJson)}), [], []);
+                        reader.renderVerse(JSON.parse({JsonSerializer.Serialize(recordJson)}), JSON.parse({JsonSerializer.Serialize(optionsJson)}), JSON.parse({JsonSerializer.Serialize(highlightsJson)}), JSON.parse({JsonSerializer.Serialize(notesJson)}));
                         'OK';
                     }} catch (e) {{
                         'RENDER_ERROR: ' + e.message;
@@ -1499,15 +1919,12 @@ namespace VedaBaseModern.UI.Views
             }
         }
 
-        private async void SyncParallelTheme()
+        private void SyncParallelTheme()
         {
-            if (!_isParallelWebReady || ParallelWebView?.CoreWebView2 == null) return;
-            try
-            {
-                string theme = this.ActualTheme == ElementTheme.Dark ? "dark" : "light";
-                await ParallelWebView.ExecuteScriptAsync($"reader.setTheme('{theme}');");
-            }
-            catch { }
+            SyncThemeToWeb();
+            SyncHighlightPaletteToWeb();
+            SyncBrightnessToWeb();
+            SyncFontSizesToWeb();
         }
 
         private async void ParallelPrevBtn_Click(object sender, RoutedEventArgs e)

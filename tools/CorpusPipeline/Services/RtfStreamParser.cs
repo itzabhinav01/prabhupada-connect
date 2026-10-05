@@ -41,6 +41,26 @@ namespace VedaBaseModern.CorpusPipeline.Services
                 char c = (char)b;
                 sb.Append(c);
 
+                // If we just saw "{\*\" (an RTF destination/footnote/bookmark group), skip until its matching "}"
+                if (sb.Length >= 4 &&
+                    sb[sb.Length - 4] == '{' &&
+                    sb[sb.Length - 3] == '\\' &&
+                    sb[sb.Length - 2] == '*' &&
+                    sb[sb.Length - 1] == '\\')
+                {
+                    sb.Length -= 4; // remove "{\*\"
+                    int depth = 1;
+                    char prev = '\\';
+                    while ((b = reader.Read()) != -1 && depth > 0)
+                    {
+                        char fc = (char)b;
+                        if (fc == '{' && prev != '\\') depth++;
+                        else if (fc == '}' && prev != '\\') depth--;
+                        prev = (fc == '\\' && prev == '\\') ? '\0' : fc;
+                    }
+                    continue;
+                }
+
                 if (sb.Length >= 8 &&
                     sb[sb.Length - 8] == '\\' &&
                     sb[sb.Length - 7] == 'p' &&
@@ -277,7 +297,8 @@ namespace VedaBaseModern.CorpusPipeline.Services
         public static string ExtractRawText(string block)
         {
             if (string.IsNullOrEmpty(block)) return string.Empty;
-            string text = block.Replace("\\'c4", "Ā").Replace("\\'e4", "ā");
+            string text = block.Replace("\r", "").Replace("\n", "");
+            text = text.Replace("\\'c4", "Ā").Replace("\\'e4", "ā");
             text = text.Replace("\\line", " ").Replace("\\par", " ");
             text = Regex.Replace(text, "\\\\\\*[a-zA-Z]+(\\d+)?", "");
             text = Regex.Replace(text, "\\\\[a-zA-Z]+(-?[0-9]+)? ?", "");

@@ -4,9 +4,20 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:local="using:VedaBaseModern.UI.Views"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="F11" Invoked="ZenAccelerator_Invoked" />
+        <KeyboardAccelerator Key="F" Modifiers="Control,Shift" Invoked="ZenAccelerator_Invoked" />
+        <KeyboardAccelerator Key="Escape" Invoked="EscapeAccelerator_Invoked" />
+        <KeyboardAccelerator Key="Add" Modifiers="Control" Invoked="ZoomInAccelerator_Invoked" />
+        <KeyboardAccelerator Key="Subtract" Modifiers="Control" Invoked="ZoomOutAccelerator_Invoked" />
+        <KeyboardAccelerator Key="Number0" Modifiers="Control" Invoked="ZoomResetAccelerator_Invoked" />
+        <KeyboardAccelerator Key="R" Modifiers="Control" Invoked="RotateRightAccelerator_Invoked" />
+        <KeyboardAccelerator Key="R" Modifiers="Control,Shift" Invoked="RotateLeftAccelerator_Invoked" />
+    </Page.KeyboardAccelerators>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -15,40 +26,172 @@
         </Grid.RowDefinitions>
 
         <!-- Top Navigation Bar -->
-        <Grid Grid.Row="0" Padding="16,8" Background="{ThemeResource NavigationViewDefaultPaneBackground}"
+        <Grid x:Name="TopNavGrid" Grid.Row="0" Padding="16,8" Background="{ThemeResource NavigationViewDefaultPaneBackground}"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Back Button & Book Title -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <!-- Sidebar Toggle (☰), Back Button & Book Title -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button x:Name="SidebarToggleButton" Click="SidebarToggleButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6" ToolTipService.ToolTip="Toggle Library Sidebar (☰ Three Lines)">
+                    <FontIcon Glyph="&#xE700;" FontSize="14" />
+                </Button>
                 <Button x:Name="BackButton" Click="BackButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6" ToolTipService.ToolTip="Back to Library">
                     <FontIcon Glyph="&#xE72B;" FontSize="14" />
                 </Button>
-                <StackPanel Orientation="Vertical">
-                    <TextBlock x:Name="BookTitleText" Text="PDF Document" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15" />
-                    <TextBlock x:Name="AuthorText" Text="Vaiṣṇava Ācārya" FontSize="12" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <StackPanel Orientation="Vertical" Margin="2,0,0,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="BookTitleText" Text="PDF Document" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="14" TextTrimming="CharacterEllipsis" MaxWidth="280" />
+                    <TextBlock x:Name="AuthorText" Text="Vaiṣṇava Ācārya" FontSize="11" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="280" />
                 </StackPanel>
             </StackPanel>
 
-            <!-- Actions: Remove Book -->
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <!-- Center Controls: Page Navigation, Zoom & Rotation -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Button x:Name="PrevPageButton" Click="PrevPageButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6" ToolTipService.ToolTip="Previous Page">
+                    <FontIcon Glyph="&#xE76B;" FontSize="12" />
+                </Button>
+                <TextBox x:Name="PageJumpBox" Text="1" Width="54" Height="28" FontSize="12"
+                         TextAlignment="Center" VerticalAlignment="Center" Padding="4,3"
+                         KeyDown="PageJumpBox_KeyDown" />
+                <TextBlock x:Name="TotalPagesText" Text="/ 1" FontSize="12" VerticalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,2,0" />
+                <Button x:Name="NextPageButton" Click="NextPageButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6" ToolTipService.ToolTip="Next Page">
+                    <FontIcon Glyph="&#xE76C;" FontSize="12" />
+                </Button>
+
+                <AppBarSeparator />
+
+                <Button x:Name="ZoomOutButton" Click="ZoomOutButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6" ToolTipService.ToolTip="Zoom Out (Ctrl+-)">
+                    <FontIcon Glyph="&#xE71F;" FontSize="13" />
+                </Button>
+                <Button x:Name="ZoomResetButton" Click="ZoomResetButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6,4" ToolTipService.ToolTip="Reset Zoom (Ctrl+0)">
+                    <TextBlock x:Name="ZoomPercentText" Text="100%" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </Button>
+                <Button x:Name="ZoomInButton" Click="ZoomInButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6" ToolTipService.ToolTip="Zoom In (Ctrl++)">
+                    <FontIcon Glyph="&#xE8A3;" FontSize="13" />
+                </Button>
+
+                <AppBarSeparator />
+
+                <Button x:Name="RotateLeftButton" Click="RotateLeftButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6" ToolTipService.ToolTip="Rotate Counter-Clockwise 90° (Ctrl+Shift+R)">
+                    <FontIcon Glyph="&#xE7A7;" FontSize="13" />
+                </Button>
+                <Button x:Name="RotateRightButton" Click="RotateRightButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="8,4" ToolTipService.ToolTip="Rotate Clockwise 90° (Ctrl+R)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE7AD;" FontSize="13" />
+                        <TextBlock Text="Rotate" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <!-- Actions: Remove Book & Focus / Zen Mode -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
                 <Button x:Name="RemoveBookButton" Click="RemoveBookButton_Click" Style="{StaticResource TextBlockButtonStyle}" ToolTipService.ToolTip="Remove this PDF book from library">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="#FF6B6B" />
                         <TextBlock Text="Remove Book" FontSize="12" Foreground="#FF6B6B" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+
+                <AppBarSeparator />
+
+                <!-- Focus / Zen Mode Button -->
+                <Button x:Name="ZenModeToggleButton" Click="ZenModeToggleButton_Click" Style="{StaticResource TextBlockButtonStyle}" ToolTipService.ToolTip="Focus View (F11)">
+                    <FontIcon x:Name="ZenModeIcon" Glyph="&#xE740;" FontSize="14" Foreground="#E5A93C" />
+                </Button>
             </StackPanel>
         </Grid>
 
-        <!-- PDF WebView2 Container -->
-        <Grid Grid.Row="1">
-            <controls:WebView2 x:Name="PdfWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+        <!-- Native Virtualized PDF Reader Container -->
+        <Grid Grid.Row="1" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <ListView x:Name="PagesListView"
+                      SelectionMode="None"
+                      IsItemClickEnabled="False"
+                      ShowsScrollingPlaceholders="False"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      Padding="0,20,0,48"
+                      ContainerContentChanging="PagesListView_ContainerContentChanging"
+                      PointerWheelChanged="PagesListView_PointerWheelChanged">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Center" />
+                        <Setter Property="Padding" Value="0,0,0,18" />
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="MinHeight" Value="0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="local:PdfPageItem">
+                        <Border Width="{x:Bind DisplayWidth, Mode=OneWay}"
+                                Height="{x:Bind DisplayHeight, Mode=OneWay}"
+                                Background="White"
+                                CornerRadius="4"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                HorizontalAlignment="Center">
+                            <Grid>
+                                <TextBlock Text="{x:Bind PageLabel}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="#888888" FontSize="14" />
+                                <Canvas Width="{x:Bind DisplayWidth, Mode=OneWay}"
+                                        Height="{x:Bind DisplayHeight, Mode=OneWay}"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                    <Image Source="{x:Bind ImageSource, Mode=OneWay}"
+                                           Width="{x:Bind UnrotatedWidth, Mode=OneWay}"
+                                           Height="{x:Bind UnrotatedHeight, Mode=OneWay}"
+                                           Canvas.Left="{x:Bind ImageCanvasLeft, Mode=OneWay}"
+                                           Canvas.Top="{x:Bind ImageCanvasTop, Mode=OneWay}"
+                                           Stretch="Fill"
+                                           RenderTransformOrigin="0.5,0.5">
+                                        <Image.RenderTransform>
+                                            <RotateTransform Angle="{x:Bind RotationAngle, Mode=OneWay}" />
+                                        </Image.RenderTransform>
+                                    </Image>
+                                </Canvas>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
             <ProgressRing x:Name="LoadingRing" Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsActive="True" />
+
+            <!-- Floating Focus Mode Pill (Shown only in Focus Mode) -->
+            <Border x:Name="FloatingZenExitButton" Visibility="Collapsed"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,16,24,0" Padding="8,4"
+                    CornerRadius="20"
+                    Opacity="0.92"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock x:Name="FocusPageText" Text="1 / 1" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="6,0,4,0" />
+                    <Button Click="ZoomOutButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6,4" ToolTipService.ToolTip="Zoom Out (Ctrl+-)">
+                        <FontIcon Glyph="&#xE71F;" FontSize="11" />
+                    </Button>
+                    <Button Click="ZoomInButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6,4" ToolTipService.ToolTip="Zoom In (Ctrl++)">
+                        <FontIcon Glyph="&#xE8A3;" FontSize="11" />
+                    </Button>
+                    <Button Click="RotateLeftButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6,4" ToolTipService.ToolTip="Rotate Counter-Clockwise 90° (Ctrl+Shift+R)">
+                        <FontIcon Glyph="&#xE7A7;" FontSize="11" />
+                    </Button>
+                    <Button Click="RotateRightButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="6,4" ToolTipService.ToolTip="Rotate Clockwise 90° (Ctrl+R)">
+                        <FontIcon Glyph="&#xE7AD;" FontSize="11" />
+                    </Button>
+                    <Button Click="ZenModeToggleButton_Click" Style="{StaticResource TextBlockButtonStyle}" Padding="8,4" ToolTipService.ToolTip="Exit Focus View (Esc or F11)">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE73F;" FontSize="13" Foreground="#E5A93C" />
+                            <TextBlock Text="Exit Focus" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Page>

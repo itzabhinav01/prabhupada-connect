@@ -163,7 +163,8 @@
         <KeyboardAccelerator Key="F1" Invoked="HelpAccelerator_Invoked" />
         <!-- Ctrl+Shift+S -> Open Folio Advanced Search & Word Wheel -->
         <KeyboardAccelerator Key="S" Modifiers="Control,Shift" Invoked="AdvancedSearchAccelerator_Invoked" />
-        <!-- Ctrl+Shift+F -> Toggle Focus / Zen Mode -->
+        <!-- F11 / Ctrl+Shift+F -> Toggle Focus / Zen Mode -->
+        <KeyboardAccelerator Key="F11" Invoked="FocusModeAccelerator_Invoked" />
         <KeyboardAccelerator Key="F" Modifiers="Control,Shift" Invoked="FocusModeAccelerator_Invoked" />
         <!-- Esc -> Exit Focus View / Close Overlays -->
         <KeyboardAccelerator Key="Escape" Invoked="EscapeAccelerator_Invoked" />

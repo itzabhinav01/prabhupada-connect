@@ -203,17 +203,17 @@ public sealed partial class MainPage : Page
                 // Fallback to default Bhagavad-gita 1.1
             }
 
-            CreateNewTab(resumeTitle, "\uE8A5", typeof(ReadingPage), resumeRecordKey);
+            CreateNewTab(resumeTitle, "\uE8A5", typeof(ReadingPage), (resumeRecordKey, false));
         }
 
-        if (NavView.MenuItemsSource != null && ViewModel.Books.Any())
+        _suppressNavSelectionChanged = true;
+        try
         {
-            var firstBook = ViewModel.Books.FirstOrDefault(b => !b.IsFolder && !b.IsHeader)
-                            ?? ViewModel.Books.FirstOrDefault()?.Children?.FirstOrDefault();
-            if (firstBook != null)
-            {
-                NavView.SelectedItem = firstBook;
-            }
+            NavView.SelectedItem = null;
+        }
+        finally
+        {
+            _suppressNavSelectionChanged = false;
         }
     }
 
@@ -342,30 +342,60 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private bool _suppressNavSelectionChanged;
+    private string? _lastOpenedBookKey;
+    private DateTime _lastOpenedBookTime = DateTime.MinValue;
+
     public void OpenBookInActiveTab(BookNode book)
     {
         if (book.IsHeader || book.IsFolder) return;
 
-        NavView.SelectedItem = book;
+        var now = DateTime.UtcNow;
+        if (string.Equals(_lastOpenedBookKey, book.BookKey, StringComparison.OrdinalIgnoreCase) &&
+            (now - _lastOpenedBookTime).TotalMilliseconds < 300)
+        {
+            return;
+        }
+        _lastOpenedBookKey = book.BookKey;
+        _lastOpenedBookTime = now;
+
+        _suppressNavSelectionChanged = true;
+        try
+        {
+            NavView.SelectedItem = book;
+        }
+        finally
+        {
+            _suppressNavSelectionChanged = false;
+        }
 
         if (book.IsPdf || (!string.IsNullOrEmpty(book.PdfPath) && File.Exists(book.PdfPath)))
         {
-            NavigateCurrentTab(typeof(PdfViewerPage), book, book.Title, "\uE7C3");
+            if (ContentTabs.TabItems.Count > 0 && CurrentFrame.Content != null)
+            {
+                CreateNewTab(book.Title, "\uE7C3", typeof(PdfViewerPage), book);
+            }
+            else
+            {
+                NavigateCurrentTab(typeof(PdfViewerPage), book, book.Title, "\uE7C3");
+            }
             return;
         }
 
-        // Reuse the already-hosted LibraryPage instance when switching
-        // between books from the sidebar instead of tearing it down and
-        // navigating to a brand-new one each time (LibraryPage doesn't
-        // opt into Frame navigation caching, so every Navigate() call
-        // was allocating a fresh page + ViewModel from scratch).
-        if (CurrentFrame.Content is LibraryPage existingLibraryPage)
+        // If the user is currently on a LibraryPage tab, switch that LibraryPage to the clicked book.
+        // If the user is reading a verse in ReadingPage (or on SearchPage, HighlightsPage, etc.),
+        // open the clicked book in a NEW tab so the current reading session is preserved.
+        if (ContentTabs.TabItems.Count > 0 && CurrentFrame.Content is LibraryPage existingLibraryPage)
         {
             existingLibraryPage.ViewModel.LoadBook(book);
             if (ContentTabs.SelectedItem is TabViewItem tab)
             {
                 tab.Header = book.Title;
             }
+        }
+        else if (ContentTabs.TabItems.Count > 0 && CurrentFrame.Content != null)
+        {
+            CreateNewTab(book.Title, "\uE8A5", typeof(LibraryPage), book);
         }
         else
         {
@@ -403,6 +433,8 @@ public sealed partial class MainPage : Page
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
+        if (_suppressNavSelectionChanged) return;
+
         if (args.IsSettingsSelected)
         {
             NavigateCurrentTab(typeof(SettingsPage), null, "Settings", "\uE713");
@@ -446,8 +478,18 @@ public sealed partial class MainPage : Page
         {
             if (suggestion.RecordKey != null)
             {
+                _suppressNavSelectionChanged = true;
                 NavView.SelectedItem = null;
-                NavigateCurrentTab(typeof(ReadingPage), suggestion.RecordKey, suggestion.RecordKey, "\uE8A5");
+                _suppressNavSelectionChanged = false;
+
+                if (ContentTabs.TabItems.Count > 0 && CurrentFrame.Content is ReadingPage)
+                {
+                    CreateNewTab(suggestion.RecordKey, "\uE8A5", typeof(ReadingPage), suggestion.RecordKey);
+                }
+                else
+                {
+                    NavigateCurrentTab(typeof(ReadingPage), suggestion.RecordKey, suggestion.RecordKey, "\uE8A5");
+                }
                 sender.Text = string.Empty;
                 sender.ItemsSource = null;
             }
@@ -462,8 +504,18 @@ public sealed partial class MainPage : Page
     {
         if (args.ChosenSuggestion is ReferenceSuggestion chosen && chosen.RecordKey != null)
         {
+            _suppressNavSelectionChanged = true;
             NavView.SelectedItem = null;
-            NavigateCurrentTab(typeof(ReadingPage), chosen.RecordKey, chosen.RecordKey, "\uE8A5");
+            _suppressNavSelectionChanged = false;
+
+            if (ContentTabs.TabItems.Count > 0 && CurrentFrame.Content is ReadingPage)
+            {
+                CreateNewTab(chosen.RecordKey, "\uE8A5", typeof(ReadingPage), chosen.RecordKey);
+            }
+            else
+            {
+                NavigateCurrentTab(typeof(ReadingPage), chosen.RecordKey, chosen.RecordKey, "\uE8A5");
+            }
             sender.Text = string.Empty;
             sender.ItemsSource = null;
             return;
@@ -476,16 +528,36 @@ public sealed partial class MainPage : Page
                 var recordKey = await App.Current.ReferenceService.TryResolveExactAsync(args.QueryText);
                 if (recordKey != null)
                 {
+                    _suppressNavSelectionChanged = true;
                     NavView.SelectedItem = null;
-                    NavigateCurrentTab(typeof(ReadingPage), recordKey, recordKey, "\uE8A5");
+                    _suppressNavSelectionChanged = false;
+
+                    if (ContentTabs.TabItems.Count > 0 && CurrentFrame.Content is ReadingPage)
+                    {
+                        CreateNewTab(recordKey, "\uE8A5", typeof(ReadingPage), recordKey);
+                    }
+                    else
+                    {
+                        NavigateCurrentTab(typeof(ReadingPage), recordKey, recordKey, "\uE8A5");
+                    }
                     sender.Text = string.Empty;
                     sender.ItemsSource = null;
                     return;
                 }
             }
 
+            _suppressNavSelectionChanged = true;
             NavView.SelectedItem = null; // Deselect library items
-            NavigateCurrentTab(typeof(SearchPage), args.QueryText, $"Search: {args.QueryText}", "\uE721");
+            _suppressNavSelectionChanged = false;
+
+            if (ContentTabs.TabItems.Count > 0 && CurrentFrame.Content is ReadingPage)
+            {
+                CreateNewTab($"Search: {args.QueryText}", "\uE721", typeof(SearchPage), args.QueryText);
+            }
+            else
+            {
+                NavigateCurrentTab(typeof(SearchPage), args.QueryText, $"Search: {args.QueryText}", "\uE721");
+            }
         }
     }
 
@@ -503,13 +575,16 @@ public sealed partial class MainPage : Page
     }
 
     private bool _isAppFocusModeActive;
+    private bool _wasPaneOpenBeforeFocus = true;
 
-    public void EnterFocusMode(ReadingPage readingPage)
+    public void EnterFocusMode(UIElement? activePage = null)
     {
         if (_isAppFocusModeActive) return;
         _isAppFocusModeActive = true;
+        _wasPaneOpenBeforeFocus = NavView.IsPaneOpen;
 
         AppTopBar.Visibility = Visibility.Collapsed;
+        NavView.IsPaneOpen = false;
         NavView.IsPaneVisible = false;
         SetTabStripVisibility(false);
     }
@@ -521,6 +596,7 @@ public sealed partial class MainPage : Page
 
         AppTopBar.Visibility = Visibility.Visible;
         NavView.IsPaneVisible = true;
+        NavView.IsPaneOpen = _wasPaneOpenBeforeFocus;
         SetTabStripVisibility(true);
     }
 
@@ -573,7 +649,13 @@ public sealed partial class MainPage : Page
             var child = VisualTreeHelper.GetChild(parent, i);
             if (child is FrameworkElement fe)
             {
-                if (fe.Name == "TabStrip" || fe.Name == "TabListView" || fe.Name == "TabContentGrid" || fe.Name == "TabContainerGrid")
+                // Do not traverse into the active tab's page Frame or content presenter
+                if (fe is Frame || fe is TabViewItem || fe.Name == "TabContentPresenter" || fe.Name == "ContentPresenter")
+                {
+                    continue;
+                }
+
+                if (fe.Name == "TabStrip" || fe.Name == "TabListView" || fe.Name == "TabContainerGrid")
                 {
                     if (fe is Grid g && g.RowDefinitions.Count >= 2)
                     {
@@ -581,7 +663,7 @@ public sealed partial class MainPage : Page
                         g.RowDefinitions[0].MaxHeight = visible ? double.PositiveInfinity : 0;
                     }
                 }
-                if (fe.Name == "TabListView" || fe is ListView)
+                if (fe.Name == "TabListView")
                 {
                     fe.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
                     fe.MaxHeight = visible ? double.PositiveInfinity : 0;
@@ -609,6 +691,10 @@ public sealed partial class MainPage : Page
             if (CurrentFrame?.Content is ReadingPage rp)
             {
                 rp.ExitZenMode();
+            }
+            else if (CurrentFrame?.Content is PdfViewerPage pp)
+            {
+                pp.ExitZenMode();
             }
             else
             {
@@ -655,6 +741,11 @@ public sealed partial class MainPage : Page
         if (CurrentFrame?.Content is ReadingPage rp)
         {
             rp.ToggleZenMode();
+            args.Handled = true;
+        }
+        else if (CurrentFrame?.Content is PdfViewerPage pp)
+        {
+            pp.ToggleZenMode();
             args.Handled = true;
         }
     }

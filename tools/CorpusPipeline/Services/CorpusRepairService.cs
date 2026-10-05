@@ -64,16 +64,7 @@ namespace VedaBaseModern.CorpusPipeline.Services
                 await RepairGenericBookAsync("ANTYA", ccAntyaRtf, "Caitanya-caritāmṛta Antya");
             }
 
-            string allOtherRtf = Path.Combine(_sourcesDir, "all_other_books.rtf");
-            if (File.Exists(allOtherRtf))
-            {
-                await RepairAllOtherBooksAsync(allOtherRtf);
-            }
-
-            // Step 3: Auto-generate Devanagari for all Sanskrit verses where still missing
-            await GenerateMissingDevanagariAsync();
-
-            // Step 4: Import missing books from canonical database
+            // Step 2a: Import missing books from canonical database first so they can also be repaired from RTF
             if (File.Exists(_canonicalDbPath))
             {
                 await ImportMissingBooksFromCanonicalAsync();
@@ -84,6 +75,15 @@ namespace VedaBaseModern.CorpusPipeline.Services
                 Console.WriteLine($"[WARN] Canonical DB not found at {_canonicalDbPath}, skipping missing book import.");
                 Console.ResetColor();
             }
+
+            string allOtherRtf = Path.Combine(_sourcesDir, "all_other_books.rtf");
+            if (File.Exists(allOtherRtf))
+            {
+                await RepairAllOtherBooksAsync(allOtherRtf);
+            }
+
+            // Step 3: Auto-generate Devanagari for all Sanskrit verses where still missing
+            await GenerateMissingDevanagariAsync();
 
             // Step 5: Normalize and fix BookKey DI
             await FixBookKeyDiAsync();
@@ -111,168 +111,21 @@ namespace VedaBaseModern.CorpusPipeline.Services
 
         private async Task RepairSrimadBhagavatamAsync(string sbRtfPath)
         {
-            Console.WriteLine("\n[Phase 1] Streaming sb.rtf to repair missing verses, transliterations, and purports...");
-            
-            // 1. Load existing SB records into memory index
-            var existingMap = new Dictionary<string, (string RecordKey, string? Dev, string? Trans, string? Purp)>(StringComparer.OrdinalIgnoreCase);
-            var normalizedMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            using (var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadOnly"))
-            {
-                await conn.OpenAsync();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT RecordKey, Reference, Devanagari, Transliteration, Purports FROM Records WHERE BookKey = 'SB';";
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    string rKey = reader.GetString(0);
-                    string rRef = reader.GetString(1);
-                    string? dev = reader.IsDBNull(2) ? null : reader.GetString(2);
-                    string? trans = reader.IsDBNull(3) ? null : reader.GetString(3);
-                    string? purp = reader.IsDBNull(4) ? null : reader.GetString(4);
-
-                    existingMap[rRef] = (rKey, dev, trans, purp);
-                    string norm = NormalizeRef(rRef);
-                    normalizedMap[norm] = rRef;
-
-                    if (rRef.Contains(","))
-                    {
-                        var parts = rRef.Split(',');
-                        string lastPart = NormalizeRef(parts[^1]);
-                        normalizedMap[lastPart] = rRef;
-                    }
-                }
-            }
-            Console.WriteLine($"[Phase 1] Loaded {existingMap.Count} existing SB records from database.");
-
-            // 2. Stream RTF and collect updates
-            int parsedCount = 0;
-            int transRepaired = 0;
-            int devRepaired = 0;
-            int purpRepaired = 0;
-
-            var updates = new List<(string RecordKey, string? Devanagari, string? Transliteration, string? Synonyms, string? Translation, string? Purports)>();
-
-            foreach (var verse in RtfStreamParser.ParseVersesFromRtf(sbRtfPath))
-            {
-                parsedCount++;
-                string norm = NormalizeRef(verse.Reference);
-                if (!normalizedMap.TryGetValue(norm, out var matchedRef) && !existingMap.ContainsKey(verse.Reference))
-                {
-                    continue;
-                }
-
-                string exactRef = matchedRef ?? verse.Reference;
-                var existing = existingMap[exactRef];
-
-                bool needUpdate = false;
-                string? newDev = existing.Dev;
-                string? newTrans = existing.Trans;
-                string? newPurp = existing.Purp;
-
-                // Fix Transliteration
-                if (string.IsNullOrWhiteSpace(existing.Trans) || (existing.Trans.Length < 30 && verse.DecodedTransliteration.Length > 50))
-                {
-                    if (!string.IsNullOrWhiteSpace(verse.DecodedTransliteration))
-                    {
-                        newTrans = verse.DecodedTransliteration;
-                        transRepaired++;
-                        needUpdate = true;
-                    }
-                }
-
-                // Fix Devanagari
-                if (string.IsNullOrWhiteSpace(existing.Dev))
-                {
-                    // If parsed has valid Devanagari, or generate from new/existing Transliteration
-                    string transForDev = !string.IsNullOrWhiteSpace(newTrans) ? newTrans : verse.DecodedTransliteration;
-                    if (!string.IsNullOrWhiteSpace(transForDev))
-                    {
-                        newDev = SanskritTransliterator.IastToDevanagari(transForDev);
-                        devRepaired++;
-                        needUpdate = true;
-                    }
-                }
-
-                // Fix Purport
-                if (!string.IsNullOrWhiteSpace(verse.DecodedPurports))
-                {
-                    if (string.IsNullOrWhiteSpace(existing.Purp) || (verse.DecodedPurports.Length > existing.Purp.Length + 10))
-                    {
-                        newPurp = verse.DecodedPurports;
-                        purpRepaired++;
-                        needUpdate = true;
-                    }
-                }
-
-                if (needUpdate)
-                {
-                    updates.Add((existing.RecordKey, newDev, newTrans, 
-                        string.IsNullOrWhiteSpace(verse.DecodedSynonyms) ? null : verse.DecodedSynonyms,
-                        string.IsNullOrWhiteSpace(verse.DecodedTranslation) ? null : verse.DecodedTranslation,
-                        newPurp));
-                }
-            }
-
-            Console.WriteLine($"[Phase 1] Parsed {parsedCount} RTF entries. Prepared {updates.Count} verse repairs:");
-            Console.WriteLine($"          - Transliterations to repair : {transRepaired}");
-            Console.WriteLine($"          - Devanagari to repair      : {devRepaired}");
-            Console.WriteLine($"          - Purports to expand/repair : {purpRepaired}");
-
-            // 3. Batch write updates into SQLite
-            using (var conn = new SqliteConnection($"Data Source={_dbPath}"))
-            {
-                await conn.OpenAsync();
-                using var tx = conn.BeginTransaction();
-                using var cmd = conn.CreateCommand();
-                cmd.Transaction = tx;
-                cmd.CommandText = @"
-                    UPDATE Records 
-                    SET Devanagari = COALESCE(@Dev, Devanagari),
-                        Transliteration = COALESCE(@Trans, Transliteration),
-                        Synonyms = COALESCE(@Syn, Synonyms),
-                        Translation = COALESCE(@Trl, Translation),
-                        Purports = COALESCE(@Purp, Purports)
-                    WHERE RecordKey = @Key;";
-
-                var pKey = cmd.Parameters.Add("@Key", SqliteType.Text);
-                var pDev = cmd.Parameters.Add("@Dev", SqliteType.Text);
-                var pTrans = cmd.Parameters.Add("@Trans", SqliteType.Text);
-                var pSyn = cmd.Parameters.Add("@Syn", SqliteType.Text);
-                var pTrl = cmd.Parameters.Add("@Trl", SqliteType.Text);
-                var pPurp = cmd.Parameters.Add("@Purp", SqliteType.Text);
-
-                foreach (var u in updates)
-                {
-                    pKey.Value = u.RecordKey;
-                    pDev.Value = (object?)u.Devanagari ?? DBNull.Value;
-                    pTrans.Value = (object?)u.Transliteration ?? DBNull.Value;
-                    pSyn.Value = (object?)u.Synonyms ?? DBNull.Value;
-                    pTrl.Value = (object?)u.Translation ?? DBNull.Value;
-                    pPurp.Value = (object?)u.Purports ?? DBNull.Value;
-                    await cmd.ExecuteNonQueryAsync();
-                }
-
-                await tx.CommitAsync();
-            }
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"[Phase 1] Committed {updates.Count} SB repairs to database.");
-            Console.ResetColor();
+            await RepairGenericBookAsync("SB", sbRtfPath, "Śrīmad-Bhāgavatam");
         }
 
         private async Task<int> RepairGenericBookAsync(string bookKey, string rtfPath, string displayName)
         {
             Console.WriteLine($"\n[Phase 1] Streaming {Path.GetFileName(rtfPath)} for {displayName} [{bookKey}]...");
 
-            var existingMap = new Dictionary<string, (string RecordKey, string? Dev, string? Trans, string? Purp)>(StringComparer.OrdinalIgnoreCase);
+            var existingMap = new Dictionary<string, (string RecordKey, string? Dev, string? Trans, string? Syn, string? Trl, string? Purp)>(StringComparer.OrdinalIgnoreCase);
             var normalizedMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             using (var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadOnly"))
             {
                 await conn.OpenAsync();
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT RecordKey, Reference, Devanagari, Transliteration, Purports FROM Records WHERE BookKey = @BKey;";
+                cmd.CommandText = "SELECT RecordKey, Reference, Devanagari, Transliteration, Synonyms, Translation, Purports FROM Records WHERE BookKey = @BKey;";
                 cmd.Parameters.AddWithValue("@BKey", bookKey);
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
@@ -281,9 +134,11 @@ namespace VedaBaseModern.CorpusPipeline.Services
                     string rRef = reader.GetString(1);
                     string? dev = reader.IsDBNull(2) ? null : reader.GetString(2);
                     string? trans = reader.IsDBNull(3) ? null : reader.GetString(3);
-                    string? purp = reader.IsDBNull(4) ? null : reader.GetString(4);
+                    string? syn = reader.IsDBNull(4) ? null : reader.GetString(4);
+                    string? trl = reader.IsDBNull(5) ? null : reader.GetString(5);
+                    string? purp = reader.IsDBNull(6) ? null : reader.GetString(6);
 
-                    existingMap[rRef] = (rKey, dev, trans, purp);
+                    existingMap[rRef] = (rKey, dev, trans, syn, trl, purp);
                     string norm = NormalizeRef(rRef);
                     normalizedMap[norm] = rRef;
 
@@ -291,13 +146,13 @@ namespace VedaBaseModern.CorpusPipeline.Services
                     {
                         var parts = rRef.Split(',');
                         string lastPart = NormalizeRef(parts[^1]);
-                        normalizedMap[lastPart] = rRef;
+                        normalizedMap.TryAdd(lastPart, rRef);
                     }
                     if (rRef.Contains("-") || rRef.Contains("–") || rRef.Contains("—"))
                     {
                         var parts = rRef.Split(new[] { '-', '–', '—' });
                         string firstPart = NormalizeRef(parts[0]);
-                        normalizedMap[firstPart] = rRef;
+                        normalizedMap.TryAdd(firstPart, rRef);
                     }
                 }
             }
@@ -307,8 +162,11 @@ namespace VedaBaseModern.CorpusPipeline.Services
             int purpExpanded = 0;
             int transRepaired = 0;
             int devRepaired = 0;
+            int collisionRestored = 0;
 
             var updates = new List<(string RecordKey, string? Devanagari, string? Transliteration, string? Synonyms, string? Translation, string? Purports)>();
+
+            bool isSanskritBook = bookKey == "SB" || bookKey == "BG" || bookKey == "ISO" || bookKey == "BS" || bookKey == "MM";
 
             foreach (var verse in RtfStreamParser.ParseVersesFromRtf(rtfPath))
             {
@@ -322,64 +180,57 @@ namespace VedaBaseModern.CorpusPipeline.Services
                 string exactRef = matchedRef ?? verse.Reference;
                 var existing = existingMap[exactRef];
 
-                bool needUpdate = false;
+                // Detect if this record was previously overwritten by a NormalizeRef collision
+                bool wasCollided = false;
+                if (!string.IsNullOrWhiteSpace(verse.DecodedTranslation) && !string.IsNullOrWhiteSpace(existing.Trl))
+                {
+                    string cleanOld = Regex.Replace(existing.Trl, @"\s+", " ").Trim();
+                    string cleanNew = Regex.Replace(verse.DecodedTranslation, @"\s+", " ").Trim();
+                    int cmpLen = Math.Min(35, Math.Min(cleanOld.Length, cleanNew.Length));
+                    if (cmpLen > 10 && !cleanOld.Substring(0, cmpLen).Equals(cleanNew.Substring(0, cmpLen), StringComparison.OrdinalIgnoreCase))
+                    {
+                        wasCollided = true;
+                        collisionRestored++;
+                    }
+                }
+
+                string? newTrans = !string.IsNullOrWhiteSpace(verse.DecodedTransliteration) ? verse.DecodedTransliteration : existing.Trans;
                 string? newDev = existing.Dev;
-                string? newTrans = existing.Trans;
+                if (isSanskritBook && !string.IsNullOrWhiteSpace(newTrans))
+                {
+                    newDev = SanskritTransliterator.IastToDevanagari(newTrans);
+                    devRepaired++;
+                }
+                else if (wasCollided && !string.IsNullOrWhiteSpace(verse.DecodedDevanagari))
+                {
+                    newDev = verse.DecodedDevanagari;
+                }
+
+                string? newSyn = !string.IsNullOrWhiteSpace(verse.DecodedSynonyms) ? verse.DecodedSynonyms : existing.Syn;
+                string? newTrl = !string.IsNullOrWhiteSpace(verse.DecodedTranslation) ? verse.DecodedTranslation : existing.Trl;
                 string? newPurp = existing.Purp;
 
-                // Fix Transliteration
-                if (string.IsNullOrWhiteSpace(existing.Trans) || (existing.Trans.Length < 30 && verse.DecodedTransliteration.Length > 50))
+                if (wasCollided)
                 {
-                    if (!string.IsNullOrWhiteSpace(verse.DecodedTransliteration))
-                    {
-                        newTrans = verse.DecodedTransliteration;
-                        transRepaired++;
-                        needUpdate = true;
-                    }
+                    // Unconditionally set Purports to the true verse's purport (even if null!)
+                    newPurp = string.IsNullOrWhiteSpace(verse.DecodedPurports) ? null : verse.DecodedPurports;
+                }
+                else if (!string.IsNullOrWhiteSpace(verse.DecodedPurports))
+                {
+                    newPurp = verse.DecodedPurports;
+                    purpExpanded++;
                 }
 
-                // Fix Devanagari (if Sanskrit book)
-                if (string.IsNullOrWhiteSpace(existing.Dev) && (bookKey == "BG" || bookKey == "ISO" || bookKey == "BS" || bookKey == "MM"))
-                {
-                    string transForDev = !string.IsNullOrWhiteSpace(newTrans) ? newTrans : verse.DecodedTransliteration;
-                    if (!string.IsNullOrWhiteSpace(transForDev))
-                    {
-                        newDev = SanskritTransliterator.IastToDevanagari(transForDev);
-                        devRepaired++;
-                        needUpdate = true;
-                    }
-                }
+                if (!string.IsNullOrWhiteSpace(verse.DecodedTransliteration)) transRepaired++;
 
-                // Purport repair: expand if parsed RTF is longer or if DB was blank
-                if (!string.IsNullOrWhiteSpace(verse.DecodedPurports))
-                {
-                    if (string.IsNullOrWhiteSpace(existing.Purp))
-                    {
-                        newPurp = verse.DecodedPurports;
-                        purpExpanded++;
-                        needUpdate = true;
-                    }
-                    else if (verse.DecodedPurports.Length > existing.Purp.Length + 10)
-                    {
-                        newPurp = verse.DecodedPurports;
-                        purpExpanded++;
-                        needUpdate = true;
-                    }
-                }
-
-                if (needUpdate)
-                {
-                    updates.Add((existing.RecordKey, newDev, newTrans,
-                        string.IsNullOrWhiteSpace(verse.DecodedSynonyms) ? null : verse.DecodedSynonyms,
-                        string.IsNullOrWhiteSpace(verse.DecodedTranslation) ? null : verse.DecodedTranslation,
-                        newPurp));
-                }
+                updates.Add((existing.RecordKey, newDev, newTrans, newSyn, newTrl, newPurp));
             }
 
             Console.WriteLine($"[Phase 1] Parsed {parsedCount} RTF entries for {bookKey}:");
-            Console.WriteLine($"          - Purports expanded/repaired : {purpExpanded}");
-            Console.WriteLine($"          - Transliterations repaired  : {transRepaired}");
-            Console.WriteLine($"          - Devanagari repaired       : {devRepaired}");
+            Console.WriteLine($"          - Collided verses restored   : {collisionRestored}");
+            Console.WriteLine($"          - Purports refreshed         : {purpExpanded}");
+            Console.WriteLine($"          - Transliterations refreshed : {transRepaired}");
+            Console.WriteLine($"          - Devanagari refreshed       : {devRepaired}");
 
             if (updates.Count > 0)
             {
@@ -391,11 +242,11 @@ namespace VedaBaseModern.CorpusPipeline.Services
                     cmd.Transaction = tx;
                     cmd.CommandText = @"
                         UPDATE Records 
-                        SET Devanagari = COALESCE(@Dev, Devanagari),
-                            Transliteration = COALESCE(@Trans, Transliteration),
-                            Synonyms = COALESCE(@Syn, Synonyms),
-                            Translation = COALESCE(@Trl, Translation),
-                            Purports = COALESCE(@Purp, Purports)
+                        SET Devanagari = @Dev,
+                            Transliteration = @Trans,
+                            Synonyms = @Syn,
+                            Translation = @Trl,
+                            Purports = @Purp
                         WHERE RecordKey = @Key;";
 
                     var pKey = cmd.Parameters.Add("@Key", SqliteType.Text);
@@ -423,10 +274,6 @@ namespace VedaBaseModern.CorpusPipeline.Services
                 Console.WriteLine($"[Phase 1] Successfully committed {updates.Count} repairs for {bookKey}.");
                 Console.ResetColor();
             }
-            else
-            {
-                Console.WriteLine($"[Phase 1] All records in {bookKey} are verified 100% complete.");
-            }
 
             return updates.Count;
         }
@@ -435,14 +282,14 @@ namespace VedaBaseModern.CorpusPipeline.Services
         {
             Console.WriteLine($"\n[Phase 1] Streaming all_other_books.rtf to verify NOI, ISO, TLK, MM, NBS...");
 
-            var existingMap = new Dictionary<string, (string RecordKey, string BookKey, string? Dev, string? Trans, string? Purp)>(StringComparer.OrdinalIgnoreCase);
+            var existingMap = new Dictionary<string, (string RecordKey, string BookKey, string? Dev, string? Trans, string? Syn, string? Trl, string? Purp)>(StringComparer.OrdinalIgnoreCase);
             var normalizedMap = new Dictionary<string, (string Ref, string BookKey)>(StringComparer.OrdinalIgnoreCase);
 
             using (var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadOnly"))
             {
                 await conn.OpenAsync();
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT RecordKey, BookKey, Reference, Devanagari, Transliteration, Purports FROM Records WHERE BookKey IN ('NOI', 'ISO', 'TLK', 'MM', 'NBS', 'BS');";
+                cmd.CommandText = "SELECT RecordKey, BookKey, Reference, Devanagari, Transliteration, Synonyms, Translation, Purports FROM Records WHERE BookKey IN ('NOI', 'ISO', 'TLK', 'TQK', 'MM', 'NBS', 'BS') AND RecordKey NOT LIKE '%#%';";
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
@@ -451,9 +298,11 @@ namespace VedaBaseModern.CorpusPipeline.Services
                     string rRef = reader.GetString(2);
                     string? dev = reader.IsDBNull(3) ? null : reader.GetString(3);
                     string? trans = reader.IsDBNull(4) ? null : reader.GetString(4);
-                    string? purp = reader.IsDBNull(5) ? null : reader.GetString(5);
+                    string? syn = reader.IsDBNull(5) ? null : reader.GetString(5);
+                    string? trl = reader.IsDBNull(6) ? null : reader.GetString(6);
+                    string? purp = reader.IsDBNull(7) ? null : reader.GetString(7);
 
-                    existingMap[rRef] = (rKey, bKey, dev, trans, purp);
+                    existingMap[rRef] = (rKey, bKey, dev, trans, syn, trl, purp);
                     string norm = NormalizeRef(rRef);
                     normalizedMap[norm] = (rRef, bKey);
                 }
@@ -461,7 +310,7 @@ namespace VedaBaseModern.CorpusPipeline.Services
 
             int parsedCount = 0;
             int purpExpanded = 0;
-            var updates = new List<(string RecordKey, string? Purports)>();
+            var updates = new List<(string RecordKey, string? Trans, string? Syn, string? Trl, string? Purports)>();
 
             foreach (var verse in RtfStreamParser.ParseVersesFromRtf(rtfPath))
             {
@@ -484,17 +333,16 @@ namespace VedaBaseModern.CorpusPipeline.Services
                 }
 
                 var existing = existingMap[matched.Ref];
-                if (!string.IsNullOrWhiteSpace(verse.DecodedPurports))
-                {
-                    if (string.IsNullOrWhiteSpace(existing.Purp) || verse.DecodedPurports.Length > existing.Purp.Length + 10)
-                    {
-                        updates.Add((existing.RecordKey, verse.DecodedPurports));
-                        purpExpanded++;
-                    }
-                }
+                string? newTrans = !string.IsNullOrWhiteSpace(verse.DecodedTransliteration) ? verse.DecodedTransliteration : existing.Trans;
+                string? newSyn = !string.IsNullOrWhiteSpace(verse.DecodedSynonyms) ? verse.DecodedSynonyms : existing.Syn;
+                string? newTrl = !string.IsNullOrWhiteSpace(verse.DecodedTranslation) ? verse.DecodedTranslation : existing.Trl;
+                string? newPurp = !string.IsNullOrWhiteSpace(verse.DecodedPurports) ? verse.DecodedPurports : existing.Purp;
+
+                updates.Add((existing.RecordKey, newTrans, newSyn, newTrl, newPurp));
+                if (!string.IsNullOrWhiteSpace(verse.DecodedPurports)) purpExpanded++;
             }
 
-            Console.WriteLine($"[Phase 1] Parsed {parsedCount} entries in all_other_books.rtf. Purports to expand: {purpExpanded}");
+            Console.WriteLine($"[Phase 1] Parsed {parsedCount} entries in all_other_books.rtf. Purports refreshed: {purpExpanded}");
 
             if (updates.Count > 0)
             {
@@ -504,13 +352,19 @@ namespace VedaBaseModern.CorpusPipeline.Services
                     using var tx = conn.BeginTransaction();
                     using var cmd = conn.CreateCommand();
                     cmd.Transaction = tx;
-                    cmd.CommandText = "UPDATE Records SET Purports = @Purp WHERE RecordKey = @Key;";
+                    cmd.CommandText = "UPDATE Records SET Transliteration = @Trans, Synonyms = @Syn, Translation = @Trl, Purports = @Purp WHERE RecordKey = @Key;";
                     var pKey = cmd.Parameters.Add("@Key", SqliteType.Text);
+                    var pTrans = cmd.Parameters.Add("@Trans", SqliteType.Text);
+                    var pSyn = cmd.Parameters.Add("@Syn", SqliteType.Text);
+                    var pTrl = cmd.Parameters.Add("@Trl", SqliteType.Text);
                     var pPurp = cmd.Parameters.Add("@Purp", SqliteType.Text);
 
                     foreach (var u in updates)
                     {
                         pKey.Value = u.RecordKey;
+                        pTrans.Value = (object?)u.Trans ?? DBNull.Value;
+                        pSyn.Value = (object?)u.Syn ?? DBNull.Value;
+                        pTrl.Value = (object?)u.Trl ?? DBNull.Value;
                         pPurp.Value = (object?)u.Purports ?? DBNull.Value;
                         await cmd.ExecuteNonQueryAsync();
                     }
@@ -616,7 +470,7 @@ namespace VedaBaseModern.CorpusPipeline.Services
                     srcCmd.CommandText = @"
                         SELECT RecordKey, BookKey, Sequence, ParentKey, RecordType, Reference, ReferenceStatus, Title,
                                Devanagari, Transliteration, Synonyms, Translation, Purports
-                        FROM Records WHERE BookKey = @BKey ORDER BY Sequence ASC;";
+                        FROM Records WHERE BookKey = @BKey AND RecordKey NOT LIKE '%#%' ORDER BY Sequence ASC;";
                     srcCmd.Parameters.AddWithValue("@BKey", bookKey);
 
                     using var r = await srcCmd.ExecuteReaderAsync();
@@ -878,7 +732,8 @@ namespace VedaBaseModern.CorpusPipeline.Services
                         .Replace("vs", "")
                         .Replace("cc", "")
                         .Replace("text", "");
-            return Regex.Replace(s, @"[^a-z0-9]", "");
+            s = Regex.Replace(s, @"(?<=\d)[\.\-–—:/\s]+(?=\d)", ".");
+            return Regex.Replace(s, @"[^a-z0-9\.]", "").Trim('.');
         }
     }
 }

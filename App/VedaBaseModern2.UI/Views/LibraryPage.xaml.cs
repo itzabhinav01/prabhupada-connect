@@ -14,6 +14,7 @@ namespace VedaBaseModern.UI.Views
         public LibraryPage()
         {
             this.InitializeComponent();
+            this.NavigationCacheMode = NavigationCacheMode.Enabled;
             ViewModel = new LibraryViewModel();
         }
 
@@ -22,7 +23,10 @@ namespace VedaBaseModern.UI.Views
             base.OnNavigatedTo(e);
             if (e.Parameter is BookNode book)
             {
-                ViewModel.LoadBook(book);
+                if (e.NavigationMode != NavigationMode.Back || !string.Equals(ViewModel.CurrentBook?.BookKey, book.BookKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    ViewModel.LoadBook(book);
+                }
             }
         }
 

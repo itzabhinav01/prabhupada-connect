@@ -76,7 +76,7 @@ namespace VedaBaseModern.CorpusPipeline
 
                     case "repair-corpus":
                         string sourcesDir = Path.Combine(Path.GetDirectoryName(dbPath)!, "sources");
-                        string canonicalDb = @"C:\VedaBaseModern\SmokeTest\UnknownResolution\corpus_v10_2_canonical.db";
+                        string canonicalDb = @"C:\VedaBaseModern2\Database\prabhupada_corpus_pre_refine_20260926_192604.db";
                         if (args.Length > 1) sourcesDir = args[1];
                         if (args.Length > 2) canonicalDb = args[2];
                         var repairService = new CorpusRepairService(dbPath, sourcesDir, canonicalDb);

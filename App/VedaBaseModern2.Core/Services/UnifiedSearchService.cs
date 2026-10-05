@@ -42,7 +42,7 @@ namespace VedaBaseModern.Core.Services
             var corpusTask = _corpusRepository.SearchAsync(query, bookKey, limit, offset, fieldScope, bookKeys, isExactWord, sortOrder, isExactCase);
 
             var isAllScope = string.IsNullOrWhiteSpace(fieldScope) || fieldScope.Equals("All", StringComparison.OrdinalIgnoreCase);
-            var userTask = isAllScope ? _userRepository.SearchUserContentAsync(query) : Task.FromResult(new List<UserSearchResult>());
+            var userTask = isAllScope ? _userRepository.SearchUserContentAsync(query, isExactWord) : Task.FromResult(new List<UserSearchResult>());
 
             await Task.WhenAll(corpusTask, userTask);
 
