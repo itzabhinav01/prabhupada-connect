@@ -3,7 +3,7 @@
 
 #define MyAppName "Prabhupāda Connect"
 #ifndef MyAppVersion
-#define MyAppVersion "2.0.4"
+#define MyAppVersion "2.0.5"
 #endif
 #define MyAppPublisher "Bhaktivedanta Research Group"
 #define MyAppURL "https://github.com/itzabhinav01/prabhupada-connect"
