@@ -309,8 +309,8 @@ namespace VedaBaseModern.UI.Views
                     coreWebView2.NewWindowRequested -= CoreWebView2_NewWindowRequested;
                     coreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
 
-                    LogDebug("Navigating to https://reader.example/reader.html?v=20261005a");
-                    coreWebView2.Navigate("https://reader.example/reader.html?v=20261005a");
+                    LogDebug("Navigating to https://reader.example/reader.html?v=20261005b");
+                    coreWebView2.Navigate("https://reader.example/reader.html?v=20261005b");
                     return; // Success!
                 }
                 catch (System.Runtime.InteropServices.COMException comEx) when (

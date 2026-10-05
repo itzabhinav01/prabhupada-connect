@@ -796,6 +796,31 @@
             .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[\t ]*\r?\n[\t ]*(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3')
             .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
 
+    function cleanVerseDevanagari(text) {
+        if (!text) return '';
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => {
+            if (!l) return false;
+            if (/^\\+\s*$/.test(l)) return false;
+            if (/\\\*.*(?:औदिओ|सम्प्ले|sample|audio|lastplace|लस्त्)/i.test(l)) return false;
+            if (/(?:औदिओ.*सम्प्ले|bg audio|audio sample)/i.test(l)) return false;
+            return true;
+        });
+        return lines.join('\n')
+            .replace(/\\\*(?:lastplace|लस्त्प्लचे|लस्त्\*लस्थ)[^\s\n]*/gi, '')
+            .replace(/\\\*.*?\*/g, '');
+    }
+
+    function cleanVerseTransliteration(text) {
+        if (!text) return '';
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => {
+            if (!l) return false;
+            if (/^\\+\s*$/.test(l)) return false;
+            if (/(?:audio sample|sample audio)/i.test(l)) return false;
+            return true;
+        });
+        return healBrokenSanskritAndSplits(lines.join('\n'));
+    }
+
         // 4. Heal stray line-wrap breaks and spaces inside brackets/parentheses: e.g. "[SB 4.30.20\n]" -> "[SB 4.30.20]"
         healed = healed
             .replace(/([\[\(])[ \t]*\r?\n[ \t]*/g, '$1')
@@ -1858,13 +1883,17 @@
         `;
 
         if (record.Devanagari) {
-            html += `<div class="verse-devanagari" data-field="Devanagari">${applyHighlights(record.Devanagari, hlMap['devanagari'])}</div>`;
+            const cleanDev = cleanVerseDevanagari(record.Devanagari);
+            if (cleanDev) {
+                html += `<div class="verse-devanagari" data-field="Devanagari">${applyHighlights(cleanDev, hlMap['devanagari'])}</div>`;
+            }
         }
 
         if (record.Transliteration && showTranslit) {
-            html += `<div class="verse-transliteration" data-field="Transliteration">${applyHighlights(record.Transliteration, hlMap['transliteration'])}</div>`;
+            const cleanTra = cleanVerseTransliteration(record.Transliteration);
+            html += `<div class="verse-transliteration" data-field="Transliteration">${applyHighlights(cleanTra, hlMap['transliteration'])}</div>`;
             if (showPronunciation) {
-                const meterGuideHtml = generateMeterGuideHtml(record.Transliteration, record.RecordKey);
+                const meterGuideHtml = generateMeterGuideHtml(cleanTra, record.RecordKey);
                 if (meterGuideHtml) {
                     html += meterGuideHtml;
                 }
@@ -1993,13 +2022,17 @@
             }
 
             if (record.Devanagari) {
-                html += `<div class="verse-devanagari" data-field="Devanagari">${applyHighlights(record.Devanagari, hlMap['devanagari'])}</div>`;
+                const cleanDev = cleanVerseDevanagari(record.Devanagari);
+                if (cleanDev) {
+                    html += `<div class="verse-devanagari" data-field="Devanagari">${applyHighlights(cleanDev, hlMap['devanagari'])}</div>`;
+                }
             }
 
             if (record.Transliteration && showTranslit) {
-                html += `<div class="verse-transliteration" data-field="Transliteration">${applyHighlights(record.Transliteration, hlMap['transliteration'])}</div>`;
+                const cleanTra = cleanVerseTransliteration(record.Transliteration);
+                html += `<div class="verse-transliteration" data-field="Transliteration">${applyHighlights(cleanTra, hlMap['transliteration'])}</div>`;
                 if (showPronunciation) {
-                    const meterGuideHtml = generateMeterGuideHtml(record.Transliteration, record.RecordKey);
+                    const meterGuideHtml = generateMeterGuideHtml(cleanTra, record.RecordKey);
                     if (meterGuideHtml) {
                         html += meterGuideHtml;
                     }
