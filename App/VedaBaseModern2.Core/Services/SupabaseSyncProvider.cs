@@ -232,14 +232,39 @@ namespace VedaBaseModern.Core.Services
 
             try
             {
-                // 1. Verify OTP with Supabase Auth endpoint: /verify
-                var verifyBody = new
+                // 1. Verify OTP or token_hash with Supabase Auth endpoint: /verify
+                string trimmedToken = otpToken.Trim();
+                // If user pasted the link or hash, extract it:
+                if (trimmedToken.Contains("token="))
                 {
-                    type = "recovery",
-                    email = email.Trim(),
-                    token = otpToken.Trim()
-                };
-                string verifyJson = JsonSerializer.Serialize(verifyBody);
+                    var match = System.Text.RegularExpressions.Regex.Match(trimmedToken, @"token=([a-zA-Z0-9]+)");
+                    if (match.Success) trimmedToken = match.Groups[1].Value;
+                }
+
+                // In Supabase Auth:
+                // - If token is long (hex/hash, typically > 20 chars), Supabase requires { type: "recovery", token_hash: "<hash>" }
+                // - If token is numeric 6-digit OTP, Supabase requires { type: "recovery", email: "<email>", token: "<6-digit>" }
+                string verifyJson;
+                if (trimmedToken.Length > 20)
+                {
+                    var verifyBody = new
+                    {
+                        type = "recovery",
+                        token_hash = trimmedToken
+                    };
+                    verifyJson = JsonSerializer.Serialize(verifyBody);
+                }
+                else
+                {
+                    var verifyBody = new
+                    {
+                        type = "recovery",
+                        email = email.Trim(),
+                        token = trimmedToken
+                    };
+                    verifyJson = JsonSerializer.Serialize(verifyBody);
+                }
+
                 using var verifyReq = new HttpRequestMessage(HttpMethod.Post, $"{_authUrl}/verify");
                 verifyReq.Headers.Add("apikey", _config.AnonKey);
                 verifyReq.Content = new StringContent(verifyJson, Encoding.UTF8, "application/json");

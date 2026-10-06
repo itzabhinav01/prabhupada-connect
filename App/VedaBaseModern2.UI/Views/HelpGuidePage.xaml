@@ -429,6 +429,14 @@
                             <TextBlock Text="4. In VedaBase Modern, open Settings (gear icon in left sidebar) > Cloud Sync." TextWrapping="Wrap" />
                             <TextBlock Text="5. Paste the URL and Key into their respective fields and click 'Test Connection &amp; Sync'." TextWrapping="Wrap" />
                         </StackPanel>
+
+                        <TextBlock Text="Step 4: Password Recovery &amp; Resetting Forgotten Passwords" FontWeight="SemiBold" Margin="0,4,0,0" />
+                        <StackPanel Spacing="6" Margin="12,0,0,0">
+                            <TextBlock Text="• If you forget your cloud sync password, open Settings > Connect Cloud Sync > select 'Forgot Password'." TextWrapping="Wrap" />
+                            <TextBlock Text="• Enter your registered email address and click 'Send Verification Code'." TextWrapping="Wrap" />
+                            <TextBlock Text="• Check your email for the recovery message. You can paste the 6-digit code or the reset link URL directly into the app." TextWrapping="Wrap" />
+                            <TextBlock Text="• Enter your new password and click 'Set New Password' to complete reset and log in seamlessly without any web browser redirects." TextWrapping="Wrap" />
+                        </StackPanel>
                     </StackPanel>
                 </Expander>
 

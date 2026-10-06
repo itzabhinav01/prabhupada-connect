@@ -216,8 +216,8 @@ namespace VedaBaseModern.UI.Views
 
             var otpBox = new TextBox
             {
-                Header = "6-Digit Email Code (OTP)",
-                PlaceholderText = "Enter 6-digit code received in email",
+                Header = "Verification Code or Reset Link",
+                PlaceholderText = "Paste the 6-digit code or reset link from email",
                 Visibility = Visibility.Collapsed
             };
             rootPanel.Children.Add(otpBox);

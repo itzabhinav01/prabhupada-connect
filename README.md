@@ -174,6 +174,10 @@ Prabhupāda Connect includes native cloud synchronization backed by **Supabase**
    - Open Prabhupāda Connect $\rightarrow$ **Settings $\rightarrow$ Cloud Sync**.
    - Paste your Project URL and Anon Key, enter your email and password, and click **Connect**.
    - Your research is now safely backed up in the cloud with Row Level Security (RLS)!
+5. **Forgotten Password Recovery**:
+   - If you ever forget your password, select **Forgot Password** directly inside the Cloud Sync dialog.
+   - Enter your email address to receive a verification code or reset link.
+   - Enter the 6-digit verification code (or paste the reset link) directly into the app dialog, choose your new password, and click **Set New Password**—no web server or localhost redirect required.
 
 ---
 
