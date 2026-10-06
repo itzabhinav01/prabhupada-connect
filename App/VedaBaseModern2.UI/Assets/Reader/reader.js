@@ -796,6 +796,29 @@
             .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[\t ]*\r?\n[\t ]*(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3')
             .replace(/([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF])[ ]+(['\u2019])([sStTmMdDvVeErRlL]{1,2})\b/g, '$1$2$3');
 
+        // 4. Heal stray line-wrap breaks and spaces inside brackets/parentheses: e.g. "[SB 4.30.20\n]" -> "[SB 4.30.20]"
+        healed = healed
+            .replace(/([\[\(])[ \t]*\r?\n[ \t]*/g, '$1')
+            .replace(/[ \t]*\r?\n[ \t]*([\]\)])/g, '$1')
+            .replace(/([\[\(])[ ]+/g, '$1')
+            .replace(/[ ]+([\]\)])/g, '$1')
+            .replace(/(\(\d+)[ \t]*\r?\n[ \t]*(\d+\))/g, '$1$2')
+            .replace(/(\(\d+\.\d+)[ \t\r\n]+(\d+\))/g, '$1$2')
+            .replace(/(\d+\.)[ \t\r\n]+(\d+\.\d+)/g, '$1$2');
+
+        // 5. Heal stray line-wrap breaks before punctuation: e.g. "India\r\n." -> "India. "
+        healed = healed
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*([,;:?!])[ \t]*/g, '$1$2 ')
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*\.(?!\.)[ \t]*/g, '$1. ');
+
+        // 6. Heal stray whitespace before punctuation: e.g. "Goloka  , on" -> "Goloka, on"
+        healed = healed
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+([,;:?!])[ \t]*/g, '$1$2 ')
+            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)[ \t]*/g, '$1. ');
+
+        return healed;
+    }
+
     function cleanVerseDevanagari(text) {
         if (!text) return '';
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => {
@@ -819,29 +842,6 @@
             return true;
         });
         return healBrokenSanskritAndSplits(lines.join('\n'));
-    }
-
-        // 4. Heal stray line-wrap breaks and spaces inside brackets/parentheses: e.g. "[SB 4.30.20\n]" -> "[SB 4.30.20]"
-        healed = healed
-            .replace(/([\[\(])[ \t]*\r?\n[ \t]*/g, '$1')
-            .replace(/[ \t]*\r?\n[ \t]*([\]\)])/g, '$1')
-            .replace(/([\[\(])[ ]+/g, '$1')
-            .replace(/[ ]+([\]\)])/g, '$1')
-            .replace(/(\(\d+)[ \t]*\r?\n[ \t]*(\d+\))/g, '$1$2')
-            .replace(/(\(\d+\.\d+)[ \t\r\n]+(\d+\))/g, '$1$2')
-            .replace(/(\d+\.)[ \t\r\n]+(\d+\.\d+)/g, '$1$2');
-
-        // 5. Heal stray line-wrap breaks before punctuation: e.g. "India\r\n." -> "India. "
-        healed = healed
-            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*([,;:?!])[ \t]*/g, '$1$2 ')
-            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[\t ]*\r?\n[\t ]*\.(?!\.)[ \t]*/g, '$1. ');
-
-        // 6. Heal stray whitespace before punctuation: e.g. "Goloka  , on" -> "Goloka, on"
-        healed = healed
-            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+([,;:?!])[ \t]*/g, '$1$2 ')
-            .replace(/([a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\]\)\"”'’])[ ]+\.(?!\.)[ \t]*/g, '$1. ');
-
-        return healed;
     }
 
     function formatPurportParagraphs(purportText, fieldHighlights, isProseRecord, allowDialogue = true) {
