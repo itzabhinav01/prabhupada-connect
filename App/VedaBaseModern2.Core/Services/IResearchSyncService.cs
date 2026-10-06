@@ -56,6 +56,12 @@ namespace VedaBaseModern.Core.Services
         Task<SyncAuthResult> SendPasswordResetEmailAsync(string email, string? customUrl = null, string? customAnonKey = null);
 
         /// <summary>
+        /// Verifies a recovery OTP code sent by email and updates the account's password.
+        /// Uses default project credentials from TelemetryConfig unless custom credentials are provided.
+        /// </summary>
+        Task<SyncAuthResult> ResetPasswordWithOtpAsync(string email, string otpToken, string newPassword, string? customUrl = null, string? customAnonKey = null);
+
+        /// <summary>
         /// Configures the periodic background synchronization interval in minutes (0 = disabled/manual only).
         /// </summary>
         Task SetSyncIntervalAsync(int intervalMinutes);

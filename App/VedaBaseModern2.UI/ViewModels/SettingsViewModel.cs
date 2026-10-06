@@ -961,6 +961,31 @@ namespace VedaBaseModern.UI.ViewModels
             }
         }
 
+        public async Task<SyncAuthResult> ResetPasswordWithOtpAsync(string email, string otpToken, string newPassword, string? customUrl = null, string? customAnonKey = null)
+        {
+            CloudSyncStatusMessage = string.Empty;
+            CloudSyncErrorMessage = string.Empty;
+            try
+            {
+                var result = await _syncService.ResetPasswordWithOtpAsync(email, otpToken, newPassword, customUrl, customAnonKey);
+                if (result.Success)
+                {
+                    CloudSyncStatusMessage = result.Message;
+                    await RefreshSyncStatusAsync();
+                }
+                else
+                {
+                    CloudSyncErrorMessage = result.Message;
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                CloudSyncErrorMessage = $"Failed to reset password: {ex.Message}";
+                return new SyncAuthResult { Success = false, Message = ex.Message };
+            }
+        }
+
         public async Task CheckForUpdatesAsync()
         {
             IsCheckingForUpdates = true;

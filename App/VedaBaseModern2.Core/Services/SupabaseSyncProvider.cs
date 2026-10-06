@@ -221,6 +221,92 @@ namespace VedaBaseModern.Core.Services
             }
         }
 
+        public async Task<SyncAuthResult> ResetPasswordWithOtpAsync(string email, string otpToken, string newPassword)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return new SyncAuthResult { Success = false, Message = "Email address is required." };
+            if (string.IsNullOrWhiteSpace(otpToken))
+                return new SyncAuthResult { Success = false, Message = "OTP recovery code is required." };
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+                return new SyncAuthResult { Success = false, Message = "New password must be at least 6 characters long." };
+
+            try
+            {
+                // 1. Verify OTP with Supabase Auth endpoint: /verify
+                var verifyBody = new
+                {
+                    type = "recovery",
+                    email = email.Trim(),
+                    token = otpToken.Trim()
+                };
+                string verifyJson = JsonSerializer.Serialize(verifyBody);
+                using var verifyReq = new HttpRequestMessage(HttpMethod.Post, $"{_authUrl}/verify");
+                verifyReq.Headers.Add("apikey", _config.AnonKey);
+                verifyReq.Content = new StringContent(verifyJson, Encoding.UTF8, "application/json");
+
+                using var verifyResp = await _httpClient.SendAsync(verifyReq);
+                string verifyRespJson = await verifyResp.Content.ReadAsStringAsync();
+
+                if (!verifyResp.IsSuccessStatusCode)
+                {
+                    string errorMsg = ParseAuthErrorMessage(verifyRespJson, verifyResp.StatusCode);
+                    return new SyncAuthResult { Success = false, Message = $"Invalid or expired OTP: {errorMsg}" };
+                }
+
+                var authResp = JsonSerializer.Deserialize<SupabaseAuthResponseDto>(verifyRespJson, JsonOptions);
+                string? recoveryToken = authResp?.AccessToken;
+                if (string.IsNullOrEmpty(recoveryToken))
+                {
+                    return new SyncAuthResult { Success = false, Message = "Failed to establish recovery session from OTP." };
+                }
+
+                // 2. Update user's password using the temporary session token via PUT /user
+                var updateBody = new
+                {
+                    password = newPassword
+                };
+                string updateJson = JsonSerializer.Serialize(updateBody);
+                using var updateReq = new HttpRequestMessage(HttpMethod.Put, $"{_authUrl}/user");
+                updateReq.Headers.Add("apikey", _config.AnonKey);
+                updateReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", recoveryToken);
+                updateReq.Content = new StringContent(updateJson, Encoding.UTF8, "application/json");
+
+                using var updateResp = await _httpClient.SendAsync(updateReq);
+                if (updateResp.IsSuccessStatusCode)
+                {
+                    // Also update active session credentials if this matches the current user
+                    _authToken = recoveryToken;
+                    _config.AuthToken = recoveryToken;
+                    _config.UserEmail = email.Trim();
+                    _config.UserPassword = newPassword;
+                    if (authResp?.User?.Id != null)
+                    {
+                        _userId = authResp.User.Id;
+                        _config.UserId = authResp.User.Id;
+                    }
+
+                    return new SyncAuthResult
+                    {
+                        Success = true,
+                        Message = "Password successfully reset! You are now logged in.",
+                        Email = email.Trim(),
+                        UserId = _userId,
+                        AccessToken = recoveryToken
+                    };
+                }
+                else
+                {
+                    string updateRespJson = await updateResp.Content.ReadAsStringAsync();
+                    string errorMsg = ParseAuthErrorMessage(updateRespJson, updateResp.StatusCode);
+                    return new SyncAuthResult { Success = false, Message = $"Failed to set new password: {errorMsg}" };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new SyncAuthResult { Success = false, Message = $"Password reset failed: {ex.Message}" };
+            }
+        }
+
         private static string ParseAuthErrorMessage(string json, System.Net.HttpStatusCode statusCode)
         {
             try

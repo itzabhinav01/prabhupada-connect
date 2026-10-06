@@ -445,6 +445,43 @@ namespace VedaBaseModern.Core.Services
             return await provider.SendPasswordResetEmailAsync(email);
         }
 
+        public async Task<SyncAuthResult> ResetPasswordWithOtpAsync(string email, string otpToken, string newPassword, string? customUrl = null, string? customAnonKey = null)
+        {
+            string url = !string.IsNullOrWhiteSpace(customUrl) ? customUrl.Trim() : (TelemetryConfig.SupabaseUrl?.Trim() ?? string.Empty);
+            string key = !string.IsNullOrWhiteSpace(customAnonKey) ? customAnonKey.Trim() : (TelemetryConfig.SupabaseAnonKey?.Trim() ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key) ||
+                url.Contains("YOUR_PROJECT_ID", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("YOUR_SUPABASE_ANON_KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                return new SyncAuthResult
+                {
+                    Success = false,
+                    Message = "Cloud sync backend is not yet configured. Please enter a custom Supabase server or contact support."
+                };
+            }
+
+            string deviceId = await _userRepository.GetDeviceIdAsync();
+            var config = new SupabaseConfig
+            {
+                ProjectUrl = url,
+                AnonKey = key
+            };
+
+            var provider = new SupabaseSyncProvider(_httpClient, config, deviceId);
+            var result = await provider.ResetPasswordWithOtpAsync(email, otpToken, newPassword);
+            if (result.Success)
+            {
+                // Reconfigure active sync provider with the new credentials so user is immediately connected
+                var configResult = await ConfigureSupabaseAsync(url, key, email, newPassword);
+                if (configResult.Success)
+                {
+                    await _credentialStorage.SaveCredentialsAsync("Supabase_Password", newPassword);
+                }
+            }
+            return result;
+        }
+
         public async Task SetSyncIntervalAsync(int intervalMinutes)
         {
             _syncIntervalMinutes = intervalMinutes;

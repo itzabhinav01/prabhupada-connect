@@ -59,5 +59,11 @@ namespace VedaBaseModern.Core.Services
         /// Requests a password reset / recovery email for the specified address.
         /// </summary>
         Task<SyncAuthResult> SendPasswordResetEmailAsync(string email);
+
+        /// <summary>
+        /// Verifies a password reset OTP code sent to the email and sets the new password.
+        /// </summary>
+        Task<SyncAuthResult> ResetPasswordWithOtpAsync(string email, string otpToken, string newPassword);
     }
 }
+

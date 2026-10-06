@@ -214,6 +214,14 @@ namespace VedaBaseModern.UI.Views
             };
             rootPanel.Children.Add(confirmPassBox);
 
+            var otpBox = new TextBox
+            {
+                Header = "6-Digit Email Code (OTP)",
+                PlaceholderText = "Enter 6-digit code received in email",
+                Visibility = Visibility.Collapsed
+            };
+            rootPanel.Children.Add(otpBox);
+
             // Error display inside dialog
             var dialogErrorText = new TextBlock
             {
@@ -223,6 +231,19 @@ namespace VedaBaseModern.UI.Views
                 Foreground = VedaBaseModern.UI.Services.CustomThemeService.GetThemeBrush("SystemFillColorCriticalBrush", dialog.RequestedTheme)
             };
             rootPanel.Children.Add(dialogErrorText);
+
+            // Success / Info display inside dialog
+            var dialogInfoText = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Visibility = Visibility.Collapsed,
+                Foreground = VedaBaseModern.UI.Services.CustomThemeService.GetThemeBrush("SystemFillColorSuccessBrush", dialog.RequestedTheme)
+            };
+            rootPanel.Children.Add(dialogInfoText);
+
+            // State for OTP reset flow
+            bool otpSent = false;
 
             // Advanced Expander for custom self-hosted Supabase server
             var customServerExpander = new Expander
@@ -261,6 +282,14 @@ namespace VedaBaseModern.UI.Views
             {
                 dialogErrorText.Visibility = Visibility.Collapsed;
                 dialogErrorText.Text = string.Empty;
+                dialogInfoText.Visibility = Visibility.Collapsed;
+                dialogInfoText.Text = string.Empty;
+                otpSent = false;
+                otpBox.Visibility = Visibility.Collapsed;
+                otpBox.Text = string.Empty;
+                passBox.Header = "Password";
+                passBox.Password = string.Empty;
+                confirmPassBox.Password = string.Empty;
 
                 switch (modeSelector.SelectedIndex)
                 {
@@ -277,8 +306,8 @@ namespace VedaBaseModern.UI.Views
                         confirmPassBox.Visibility = Visibility.Visible;
                         break;
                     case 2: // Forgot Password
-                        dialog.PrimaryButtonText = "Send Reset Link";
-                        introText.Text = "Enter your registered email address and we'll send you a link to reset your password.";
+                        dialog.PrimaryButtonText = "Send Verification Code";
+                        introText.Text = "Enter your email address and we'll send a 6-digit verification code to reset your password.";
                         passBox.Visibility = Visibility.Collapsed;
                         confirmPassBox.Visibility = Visibility.Collapsed;
                         break;
@@ -294,6 +323,7 @@ namespace VedaBaseModern.UI.Views
                 try
                 {
                     dialogErrorText.Visibility = Visibility.Collapsed;
+                    dialogInfoText.Visibility = Visibility.Collapsed;
                     string email = emailBox.Text.Trim();
                     string pass = passBox.Password;
                     string confirmPass = confirmPassBox.Password;
@@ -356,13 +386,72 @@ namespace VedaBaseModern.UI.Views
                     }
                     else if (modeSelector.SelectedIndex == 2) // Forgot Password
                     {
-                        var result = await ViewModel.SendPasswordResetEmailAsync(email, customUrl, customKey);
-                        if (!result.Success)
+                        if (!otpSent)
                         {
-                            dialogErrorText.Text = result.Message;
-                            dialogErrorText.Visibility = Visibility.Visible;
+                            // Step 1: Send the recovery code
+                            var result = await ViewModel.SendPasswordResetEmailAsync(email, customUrl, customKey);
+                            if (!result.Success)
+                            {
+                                dialogErrorText.Text = result.Message;
+                                dialogErrorText.Visibility = Visibility.Visible;
+                                args.Cancel = true;
+                                return;
+                            }
+
+                            // Advance to Step 2: Prompt for OTP code and new password
+                            otpSent = true;
+                            dialog.PrimaryButtonText = "Set New Password";
+                            introText.Text = "A 6-digit code has been sent to your email. Enter the code and your new password below:";
+                            otpBox.Visibility = Visibility.Visible;
+                            passBox.Header = "New Password";
+                            passBox.PlaceholderText = "At least 6 characters";
+                            passBox.Visibility = Visibility.Visible;
+                            confirmPassBox.Header = "Confirm New Password";
+                            confirmPassBox.Visibility = Visibility.Visible;
+
+                            dialogInfoText.Text = "Code sent! Check your inbox (or spam folder) for the 6-digit code.";
+                            dialogInfoText.Visibility = Visibility.Visible;
+
+                            // Keep dialog open so user can enter the OTP
                             args.Cancel = true;
                             return;
+                        }
+                        else
+                        {
+                            // Step 2: Verify OTP and save new password
+                            string otp = otpBox.Text.Trim();
+                            if (string.IsNullOrWhiteSpace(otp))
+                            {
+                                dialogErrorText.Text = "Please enter the 6-digit verification code from your email.";
+                                dialogErrorText.Visibility = Visibility.Visible;
+                                args.Cancel = true;
+                                return;
+                            }
+
+                            if (string.IsNullOrEmpty(pass) || pass.Length < 6)
+                            {
+                                dialogErrorText.Text = "New password must be at least 6 characters long.";
+                                dialogErrorText.Visibility = Visibility.Visible;
+                                args.Cancel = true;
+                                return;
+                            }
+
+                            if (pass != confirmPass)
+                            {
+                                dialogErrorText.Text = "New passwords do not match. Please re-enter.";
+                                dialogErrorText.Visibility = Visibility.Visible;
+                                args.Cancel = true;
+                                return;
+                            }
+
+                            var result = await ViewModel.ResetPasswordWithOtpAsync(email, otp, pass, customUrl, customKey);
+                            if (!result.Success)
+                            {
+                                dialogErrorText.Text = result.Message;
+                                dialogErrorText.Visibility = Visibility.Visible;
+                                args.Cancel = true;
+                                return;
+                            }
                         }
                     }
                 }
